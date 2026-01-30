@@ -1,9 +1,9 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Menu, X, Wallet, User, Trophy, Zap, Gamepad2, Search } from 'lucide-react';
+import { Menu, X, Wallet, User, Trophy, Zap, Gamepad2, Search, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-
+import { useAuth } from '@/hooks/useAuth';
 const navLinks = [
   { href: '/', label: 'Sports', icon: Trophy },
   { href: '/live', label: 'Live', icon: Zap, isLive: true },
@@ -13,7 +13,9 @@ const navLinks = [
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
-
+  const navigate = useNavigate();
+  const { isAuthenticated, wallet } = useAuth();
+  const balance = parseFloat(wallet?.balance?.toString() || '0');
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="container flex h-16 items-center justify-between">
@@ -58,18 +60,33 @@ export function Header() {
           </Button>
 
           {/* Balance Display */}
-          <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary">
-            <Wallet className="h-4 w-4 text-primary" />
-            <span className="font-bold">$1,250.00</span>
-          </div>
+          {isAuthenticated ? (
+            <>
+              <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary">
+                <Wallet className="h-4 w-4 text-primary" />
+                <span className="font-bold">${balance.toFixed(2)}</span>
+              </div>
 
-          <Button variant="hero" className="hidden sm:flex">
-            Deposit
-          </Button>
+              <Link to="/account">
+                <Button variant="hero" className="hidden sm:flex">
+                  Deposit
+                </Button>
+              </Link>
 
-          <Button variant="ghost" size="icon" className="hidden md:flex">
-            <User className="h-5 w-5" />
-          </Button>
+              <Link to="/account">
+                <Button variant="ghost" size="icon" className="hidden md:flex">
+                  <User className="h-5 w-5" />
+                </Button>
+              </Link>
+            </>
+          ) : (
+            <Link to="/auth">
+              <Button variant="hero" className="hidden sm:flex">
+                <LogIn className="h-4 w-4" />
+                Sign In
+              </Button>
+            </Link>
+          )}
 
           {/* Mobile Menu Toggle */}
           <Button
@@ -107,15 +124,26 @@ export function Header() {
                   )}
                 </Link>
               ))}
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-primary" />
-                  <span className="font-bold">$1,250.00</span>
+              {isAuthenticated ? (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-primary" />
+                    <span className="font-bold">${balance.toFixed(2)}</span>
+                  </div>
+                  <Link to="/account">
+                    <Button variant="hero" size="sm">
+                      Account
+                    </Button>
+                  </Link>
                 </div>
-                <Button variant="hero" size="sm">
-                  Deposit
-                </Button>
-              </div>
+              ) : (
+                <Link to="/auth" className="mt-4 pt-4 border-t border-border block">
+                  <Button variant="hero" className="w-full">
+                    <LogIn className="h-4 w-4" />
+                    Sign In
+                  </Button>
+                </Link>
+              )}
             </nav>
           </motion.div>
         )}
