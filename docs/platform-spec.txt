@@ -1,0 +1,56 @@
+
+LOVABLE AI MASTER PROMPT – SPORTS BETTING PLATFORM
+
+Build a modern, responsive sports betting platform with a clean, professional UI inspired by top African and global bookmakers (betPawa-style), but more polished, faster, and easier to use.
+
+GLOBAL LAYOUT & NAVIGATION
+- Sticky top header with brand logo, global search, wallet balance, Deposit button, and account menu
+- Tab navigation: Upcoming, Popular, Live (with badge)
+- Fully responsive (desktop, tablet, mobile-first)
+
+SIDEBAR / DRAWER MENU
+- Collapsible sidebar with sports categories
+- League list with country flags and match counts
+- Smooth animations and filters
+
+MATCH LISTING SYSTEM
+- Card-based match layout
+- Kickoff time, teams, league, sport icon
+- 1X2 odds buttons
+- Extra markets button
+- Hot odds indicator
+- Sorting and filtering options
+
+LIVE BETTING
+- Real-time score updates
+- Live time indicators
+- Locked odds handling
+- Visual emphasis for live games
+
+BETSLIP
+- Sticky betslip panel
+- Booking code support
+- Stake input
+- Total odds and potential winnings
+- Single and accumulator bets
+
+ACCOUNT & WALLET
+- Login/signup
+- Wallet with local currency
+- Deposit and withdrawal
+- My bets, transactions, notifications
+
+DESIGN & UX
+- Green primary actions
+- Dark theme accents
+- Clean typography
+- Mobile-friendly interactions
+
+SMART FEATURES
+- Odds locking
+- Notifications
+- Error and empty states
+- Accessibility support
+
+GOAL
+Create a fast, trustworthy, premium betting platform optimized for African markets.
