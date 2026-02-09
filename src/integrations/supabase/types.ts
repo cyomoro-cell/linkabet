@@ -14,7 +14,237 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ai_usage: {
+        Row: {
+          created_at: string | null
+          fee_charged: number | null
+          id: string
+          prompt: string
+          response: string | null
+          tokens_used: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          fee_charged?: number | null
+          id?: string
+          prompt: string
+          response?: string | null
+          tokens_used?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          fee_charged?: number | null
+          id?: string
+          prompt?: string
+          response?: string | null
+          tokens_used?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bets: {
+        Row: {
+          created_at: string | null
+          id: string
+          match_data: Json
+          match_id: string
+          potential_win: number
+          result_data: Json | null
+          selections: Json
+          settled_at: string | null
+          stake: number
+          status: Database["public"]["Enums"]["bet_status"] | null
+          total_odds: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          match_data: Json
+          match_id: string
+          potential_win: number
+          result_data?: Json | null
+          selections: Json
+          settled_at?: string | null
+          stake: number
+          status?: Database["public"]["Enums"]["bet_status"] | null
+          total_odds: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          match_data?: Json
+          match_id?: string
+          potential_win?: number
+          result_data?: Json | null
+          selections?: Json
+          settled_at?: string | null
+          stake?: number
+          status?: Database["public"]["Enums"]["bet_status"] | null
+          total_odds?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          ban_reason: string | null
+          created_at: string | null
+          email: string
+          id: string
+          is_banned: boolean | null
+          phone: string | null
+          updated_at: string | null
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          ban_reason?: string | null
+          created_at?: string | null
+          email: string
+          id: string
+          is_banned?: boolean | null
+          phone?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          ban_reason?: string | null
+          created_at?: string | null
+          email?: string
+          id?: string
+          is_banned?: boolean | null
+          phone?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
+      system_settings: {
+        Row: {
+          description: string | null
+          id: string
+          key: string
+          updated_at: string | null
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string | null
+          description: string | null
+          fee: number | null
+          id: string
+          net_amount: number
+          reference_id: string | null
+          status: string | null
+          type: Database["public"]["Enums"]["transaction_type"]
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          description?: string | null
+          fee?: number | null
+          id?: string
+          net_amount: number
+          reference_id?: string | null
+          status?: string | null
+          type: Database["public"]["Enums"]["transaction_type"]
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          description?: string | null
+          fee?: number | null
+          id?: string
+          net_amount?: number
+          reference_id?: string | null
+          status?: string | null
+          type?: Database["public"]["Enums"]["transaction_type"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wallets: {
+        Row: {
+          balance: number | null
+          created_at: string | null
+          currency: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          balance?: number | null
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          balance?: number | null
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +253,15 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      app_role: "user" | "admin" | "master"
+      bet_status: "pending" | "won" | "lost" | "cancelled" | "cashout"
+      transaction_type:
+        | "deposit"
+        | "withdrawal"
+        | "bet"
+        | "win"
+        | "ai_fee"
+        | "refund"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +388,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["user", "admin", "master"],
+      bet_status: ["pending", "won", "lost", "cancelled", "cashout"],
+      transaction_type: [
+        "deposit",
+        "withdrawal",
+        "bet",
+        "win",
+        "ai_fee",
+        "refund",
+      ],
+    },
   },
 } as const
