@@ -5,16 +5,20 @@ import { FeaturedMatches } from '@/components/sections/FeaturedMatches';
 import { LiveMatches } from '@/components/sections/LiveMatches';
 import { PromotionsSection } from '@/components/sections/PromotionsSection';
 import { BetSlip } from '@/components/betting/BetSlip';
-import { mockMatches, mockPromotions } from '@/data/mockData';
+import { mockPromotions } from '@/data/mockData';
+import { useMatches } from '@/hooks/useMatches';
 import { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Receipt } from 'lucide-react';
+import { Receipt, Loader2 } from 'lucide-react';
 import { useBetSlip } from '@/hooks/useBetSlip';
 
 const Index = () => {
   const { selections } = useBetSlip();
   const [betSlipOpen, setBetSlipOpen] = useState(false);
+  const { data: matches, isLoading, error } = useMatches();
+
+  const displayMatches = matches || [];
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -22,19 +26,28 @@ const Index = () => {
       
       <main className="flex-1">
         <HeroSection />
-        <LiveMatches matches={mockMatches} />
-        <FeaturedMatches matches={mockMatches} />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="ml-3 text-muted-foreground">Loading matches...</span>
+          </div>
+        ) : (
+          <>
+            <LiveMatches matches={displayMatches} />
+            <FeaturedMatches matches={displayMatches} />
+          </>
+        )}
         <PromotionsSection promotions={mockPromotions} />
       </main>
 
       <Footer />
 
-      {/* Desktop Bet Slip - Fixed Sidebar */}
+      {/* Desktop Bet Slip */}
       <div className="hidden lg:block fixed right-6 top-24 w-80 z-40">
         <BetSlip />
       </div>
 
-      {/* Mobile Bet Slip - Sheet */}
+      {/* Mobile Bet Slip */}
       <div className="lg:hidden">
         <Sheet open={betSlipOpen} onOpenChange={setBetSlipOpen}>
           <SheetTrigger asChild>

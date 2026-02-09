@@ -8,14 +8,18 @@ interface SportFilterProps {
   onSportChange: (sport: Sport | 'all') => void;
 }
 
-const sportLabels: Record<Sport | 'all', string> = {
+const sportLabels: Record<string, string> = {
   all: 'All Sports',
   football: 'Football',
+  soccer: 'Soccer',
   basketball: 'Basketball',
   tennis: 'Tennis',
   cricket: 'Cricket',
   esports: 'Esports',
   mma: 'MMA',
+  rugby: 'Rugby',
+  'american football': 'American Football',
+  'ice hockey': 'Ice Hockey',
 };
 
 export function SportFilter({ sports, activeSport, onSportChange }: SportFilterProps) {
@@ -45,7 +49,7 @@ export function SportFilter({ sports, activeSport, onSportChange }: SportFilterP
             <span className="relative z-10">
               {sport !== 'all' && sportIcons[sport]}
             </span>
-            <span className="relative z-10">{sportLabels[sport]}</span>
+            <span className="relative z-10">{sportLabels[sport] || sport}</span>
           </button>
         );
       })}

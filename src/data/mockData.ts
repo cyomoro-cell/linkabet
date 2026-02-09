@@ -90,9 +90,13 @@ export const mockPromotions: Promotion[] = [
 
 export const sportIcons: Record<string, string> = {
   football: '⚽',
+  soccer: '⚽',
   basketball: '🏀',
   tennis: '🎾',
   cricket: '🏏',
   esports: '🎮',
   mma: '🥊',
+  rugby: '🏉',
+  'american football': '🏈',
+  'ice hockey': '🏒',
 };
