@@ -1,5 +1,6 @@
 import { Match } from '@/types';
 import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 import { useBetSlip } from '@/hooks/useBetSlip';
 import { sportIcons } from '@/data/mockData';
 import { motion } from 'framer-motion';
@@ -25,8 +26,9 @@ export function MatchCard({ match }: MatchCardProps) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group rounded-xl border border-border bg-card p-4 card-hover"
+      className="group rounded-xl border border-border bg-card p-4 card-hover relative"
     >
+      <Link to={`/match/${match.id}`} className="absolute inset-0 z-0" />
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -63,7 +65,7 @@ export function MatchCard({ match }: MatchCardProps) {
       </div>
 
       {/* Odds - with live indicator */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2 relative z-10">
         <OddsButton
           label="1"
           odds={match.odds.home}
