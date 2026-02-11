@@ -13,6 +13,7 @@ interface AuthState {
   profile: Profile | null;
   wallet: Wallet | null;
   isLoading: boolean;
+  hasLoadedUserData: boolean;
 }
 
 export function useAuth() {
@@ -23,9 +24,20 @@ export function useAuth() {
     profile: null,
     wallet: null,
     isLoading: true,
+    hasLoadedUserData: false,
   });
 
   const fetchUserData = useCallback(async (userId: string) => {
+    setState((prev) => ({ ...prev, isLoading: true, hasLoadedUserData: false }));
+
+    // Ensure the user's profile/wallet/role records exist in our database.
+    // This is idempotent and safe to call on every sign-in.
+    try {
+      await supabase.functions.invoke('bootstrap-user', { body: {} });
+    } catch (e) {
+      console.warn('bootstrap-user failed (continuing):', e);
+    }
+
     const [role, profile, wallet] = await Promise.all([
       getUserRole(userId),
       getUserProfile(userId),
@@ -37,48 +49,70 @@ export function useAuth() {
       role: role as AppRole,
       profile,
       wallet,
+      isLoading: false,
+      hasLoadedUserData: true,
     }));
   }, []);
 
   useEffect(() => {
     // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      const user = session?.user ?? null;
+
+      if (!user) {
         setState((prev) => ({
           ...prev,
-          session,
-          user: session?.user ?? null,
+          session: null,
+          user: null,
+          role: 'user',
+          profile: null,
+          wallet: null,
           isLoading: false,
+          hasLoadedUserData: false,
         }));
-
-        // Defer fetching user data to avoid deadlock
-        if (session?.user) {
-          setTimeout(() => {
-            fetchUserData(session.user.id);
-          }, 0);
-        } else {
-          setState((prev) => ({
-            ...prev,
-            role: 'user',
-            profile: null,
-            wallet: null,
-          }));
-        }
+        return;
       }
-    );
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
       setState((prev) => ({
         ...prev,
         session,
-        user: session?.user ?? null,
-        isLoading: false,
+        user,
+        isLoading: true,
+        hasLoadedUserData: false,
       }));
 
-      if (session?.user) {
-        fetchUserData(session.user.id);
+      // Defer fetching user data to avoid deadlock
+      setTimeout(() => {
+        fetchUserData(user.id);
+      }, 0);
+    });
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user ?? null;
+
+      if (!user) {
+        setState((prev) => ({
+          ...prev,
+          session: null,
+          user: null,
+          isLoading: false,
+          hasLoadedUserData: false,
+        }));
+        return;
       }
+
+      setState((prev) => ({
+        ...prev,
+        session,
+        user,
+        isLoading: true,
+        hasLoadedUserData: false,
+      }));
+
+      fetchUserData(user.id);
     });
 
     return () => subscription.unsubscribe();

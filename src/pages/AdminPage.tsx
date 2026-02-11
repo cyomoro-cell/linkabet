@@ -24,7 +24,7 @@ interface Stats {
 }
 
 export default function AdminPage() {
-  const { user, isAdmin, isMaster, isLoading } = useAuth();
+  const { user, role, isAdmin, isMaster, isLoading } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState<Stats>({
     totalUsers: 0, totalBets: 0, totalDeposits: 0,
@@ -32,10 +32,10 @@ export default function AdminPage() {
   });
 
   useEffect(() => {
-    if (!isLoading && (!user || (!isAdmin && !isMaster))) {
-      navigate('/');
+    if (!isLoading && !user) {
+      navigate('/auth');
     }
-  }, [user, isAdmin, isMaster, isLoading, navigate]);
+  }, [user, isLoading, navigate]);
 
   useEffect(() => {
     if (!isAdmin && !isMaster) return;
@@ -74,6 +74,38 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  // Logged in but not allowed
+  if (user && !isAdmin && !isMaster) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 container py-12">
+          <div className="max-w-xl mx-auto rounded-2xl border border-border bg-card p-8">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Shield className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold">Admin access required</h1>
+                <p className="text-sm text-muted-foreground">Your role is <span className="capitalize font-medium">{role}</span>.</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              If this is a fresh project, the first account that signs in becomes <span className="font-medium">master</span> automatically.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+              <Button variant="hero" onClick={() => navigate('/account')}>Go to Account</Button>
+              <Button variant="outline" onClick={() => navigate('/')}>Back to Sports</Button>
+            </div>
+          </div>
+        </main>
+        <Footer />
       </div>
     );
   }
