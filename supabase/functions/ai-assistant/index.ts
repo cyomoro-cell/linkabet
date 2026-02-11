@@ -28,6 +28,24 @@ serve(async (req) => {
     // Create Supabase client with service role
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
+    // Check if user is within free trial (10 days from account creation)
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("created_at")
+      .eq("id", userId)
+      .single();
+
+    const FREE_TRIAL_DAYS = 10;
+    let isFreeTrial = false;
+
+    if (profile?.created_at) {
+      const createdAt = new Date(profile.created_at);
+      const now = new Date();
+      const diffMs = now.getTime() - createdAt.getTime();
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      isFreeTrial = diffDays <= FREE_TRIAL_DAYS;
+    }
+
     // Get user's wallet balance
     const { data: wallet, error: walletError } = await supabase
       .from("wallets")
@@ -45,8 +63,8 @@ serve(async (req) => {
 
     const currentBalance = parseFloat(wallet.balance);
     
-    // Check if user has enough balance
-    if (currentBalance < BASE_FEE) {
+    // Only check balance if not in free trial
+    if (!isFreeTrial && currentBalance < BASE_FEE) {
       return new Response(JSON.stringify({ error: "Insufficient balance" }), {
         status: 402,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -96,14 +114,26 @@ Be concise, helpful, and always encourage responsible betting. Never guarantee w
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
-    // Deduct fee from wallet
-    const fee = BASE_FEE;
-    const newBalance = currentBalance - fee;
+    // Deduct fee from wallet (skip if free trial)
+    const fee = isFreeTrial ? 0 : BASE_FEE;
+    
+    if (!isFreeTrial) {
+      const newBalance = currentBalance - fee;
+      await supabase
+        .from("wallets")
+        .update({ balance: newBalance, updated_at: new Date().toISOString() })
+        .eq("user_id", userId);
 
-    await supabase
-      .from("wallets")
-      .update({ balance: newBalance, updated_at: new Date().toISOString() })
-      .eq("user_id", userId);
+      // Create transaction record
+      await supabase.from("transactions").insert({
+        user_id: userId,
+        type: "ai_fee",
+        amount: fee,
+        fee: 0,
+        net_amount: fee,
+        description: "AI Assistant usage fee (10%)",
+      });
+    }
 
     // Log AI usage
     const userMessage = messages[messages.length - 1]?.content || "";
@@ -112,16 +142,6 @@ Be concise, helpful, and always encourage responsible betting. Never guarantee w
       prompt: userMessage.substring(0, 500),
       tokens_used: 0,
       fee_charged: fee,
-    });
-
-    // Create transaction record
-    await supabase.from("transactions").insert({
-      user_id: userId,
-      type: "ai_fee",
-      amount: fee,
-      fee: 0,
-      net_amount: fee,
-      description: "AI Assistant usage fee (10%)",
     });
 
     return new Response(response.body, {

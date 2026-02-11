@@ -89,6 +89,45 @@ export type Database = {
         }
         Relationships: []
       }
+      matches: {
+        Row: {
+          away_team: Json
+          home_team: Json
+          id: string
+          is_live: boolean
+          league: string
+          minute: number | null
+          odds: Json
+          sport: string
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          away_team?: Json
+          home_team?: Json
+          id: string
+          is_live?: boolean
+          league: string
+          minute?: number | null
+          odds?: Json
+          sport: string
+          start_time?: string
+          updated_at?: string
+        }
+        Update: {
+          away_team?: Json
+          home_team?: Json
+          id?: string
+          is_live?: boolean
+          league?: string
+          minute?: number | null
+          odds?: Json
+          sport?: string
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
