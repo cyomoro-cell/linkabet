@@ -9,6 +9,7 @@ import CasinoPage from "./pages/CasinoPage";
 import AuthPage from "./pages/AuthPage";
 import AccountPage from "./pages/AccountPage";
 import AdminPage from "./pages/AdminPage";
+import MatchDetailPage from "./pages/MatchDetailPage";
 import NotFound from "./pages/NotFound";
 import { AIAssistant } from "./components/ai/AIAssistant";
 
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/casino" element={<CasinoPage />} />
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/match/:id" element={<MatchDetailPage />} />
           <Route path="/admin" element={<AdminPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
