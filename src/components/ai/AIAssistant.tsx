@@ -13,16 +13,36 @@ interface Message {
   content: string;
 }
 
-const AI_FEE_PERCENTAGE = 0.10; // 10% fee
+const AI_FEE_PERCENTAGE = 0.10;
+const FREE_TRIAL_DAYS = 10;
 
 export function AIAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user, wallet, refreshWallet } = useAuth();
   const { toast } = useToast();
+
+  // Check trial status
+  useEffect(() => {
+    if (!user) return;
+    const checkTrial = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('created_at')
+        .eq('id', user.id)
+        .single();
+      if (data?.created_at) {
+        const created = new Date(data.created_at);
+        const diffDays = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+        setTrialDaysLeft(Math.max(0, Math.ceil(FREE_TRIAL_DAYS - diffDays)));
+      }
+    };
+    checkTrial();
+  }, [user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -162,7 +182,11 @@ export function AIAssistant() {
                 </div>
                 <div>
                   <h3 className="font-bold">AI Assistant</h3>
-                  <p className="text-xs text-muted-foreground">10% fee per message</p>
+                  <p className="text-xs text-muted-foreground">
+                    {trialDaysLeft !== null && trialDaysLeft > 0
+                      ? `🎁 Free trial: ${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''} left`
+                      : '10% fee per message'}
+                  </p>
                 </div>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
