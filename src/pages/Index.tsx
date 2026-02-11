@@ -5,47 +5,82 @@ import { FeaturedMatches } from '@/components/sections/FeaturedMatches';
 import { LiveMatches } from '@/components/sections/LiveMatches';
 import { PromotionsSection } from '@/components/sections/PromotionsSection';
 import { BetSlip } from '@/components/betting/BetSlip';
+import { DesktopSportSidebar, MobileSportSidebar } from '@/components/layout/SportSidebar';
 import { mockPromotions } from '@/data/mockData';
-import { useMatches } from '@/hooks/useMatches';
+import { useRealtimeMatches } from '@/hooks/useRealtimeMatches';
 import { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Receipt, Loader2 } from 'lucide-react';
 import { useBetSlip } from '@/hooks/useBetSlip';
+import { Sport } from '@/types';
 
 const Index = () => {
   const { selections } = useBetSlip();
   const [betSlipOpen, setBetSlipOpen] = useState(false);
-  const { data: matches, isLoading, error } = useMatches();
+  const [activeSport, setActiveSport] = useState<Sport | 'all'>('all');
+  const [activeLeague, setActiveLeague] = useState<string>('all');
+  const { matches, isLoading, liveCount } = useRealtimeMatches();
 
-  const displayMatches = matches || [];
+  // Filter matches by sport & league
+  const filteredMatches = matches.filter(m => {
+    if (activeSport !== 'all' && m.sport !== activeSport) return false;
+    if (activeLeague !== 'all' && m.league !== activeLeague) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      
-      <main className="flex-1">
-        <HeroSection />
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <span className="ml-3 text-muted-foreground">Loading matches...</span>
+
+      <div className="flex-1 flex">
+        {/* Desktop Sidebar */}
+        <DesktopSportSidebar
+          matches={matches}
+          activeSport={activeSport}
+          activeLeague={activeLeague}
+          onSportChange={setActiveSport}
+          onLeagueChange={setActiveLeague}
+        />
+
+        {/* Main Content */}
+        <main className="flex-1 min-w-0">
+          <HeroSection />
+
+          {/* Mobile filter bar */}
+          <div className="lg:hidden container py-3">
+            <MobileSportSidebar
+              matches={matches}
+              activeSport={activeSport}
+              activeLeague={activeLeague}
+              onSportChange={setActiveSport}
+              onLeagueChange={setActiveLeague}
+            />
           </div>
-        ) : (
-          <>
-            <LiveMatches matches={displayMatches} />
-            <FeaturedMatches matches={displayMatches} />
-          </>
-        )}
-        <PromotionsSection promotions={mockPromotions} />
-      </main>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-3 text-muted-foreground">Loading matches...</span>
+            </div>
+          ) : (
+            <>
+              <LiveMatches matches={filteredMatches} />
+              <FeaturedMatches matches={filteredMatches} />
+            </>
+          )}
+          <PromotionsSection promotions={mockPromotions} />
+        </main>
+
+        {/* Desktop Bet Slip */}
+        <div className="hidden lg:block w-80 shrink-0">
+          <div className="sticky top-16 p-4">
+            <BetSlip />
+          </div>
+        </div>
+      </div>
 
       <Footer />
-
-      {/* Desktop Bet Slip */}
-      <div className="hidden lg:block fixed right-6 top-24 w-80 z-40">
-        <BetSlip />
-      </div>
 
       {/* Mobile Bet Slip */}
       <div className="lg:hidden">

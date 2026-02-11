@@ -12,21 +12,14 @@ interface MatchCardProps {
 
 export function MatchCard({ match }: MatchCardProps) {
   const { selections, addSelection } = useBetSlip();
-  
   const currentSelection = selections.find((s) => s.matchId === match.id);
 
   const handleOddsClick = (selection: 'home' | 'draw' | 'away', odds: number) => {
-    addSelection({
-      matchId: match.id,
-      match,
-      selection,
-      odds,
-    });
+    addSelection({ matchId: match.id, match, selection, odds });
   };
 
-  const getOddsButtonVariant = (selection: 'home' | 'draw' | 'away') => {
-    return currentSelection?.selection === selection ? 'oddsActive' : 'odds';
-  };
+  const getOddsButtonVariant = (selection: 'home' | 'draw' | 'away') =>
+    currentSelection?.selection === selection ? 'oddsActive' : 'odds';
 
   return (
     <motion.div
@@ -69,40 +62,69 @@ export function MatchCard({ match }: MatchCardProps) {
         </div>
       </div>
 
-      {/* Odds */}
+      {/* Odds - with live indicator */}
       <div className="grid grid-cols-3 gap-2">
-        <Button
+        <OddsButton
+          label="1"
+          odds={match.odds.home}
+          isLive={match.isLive}
           variant={getOddsButtonVariant('home')}
-          size="sm"
-          className="flex flex-col gap-0.5 h-auto py-2"
           onClick={() => handleOddsClick('home', match.odds.home)}
-        >
-          <span className="text-xs text-muted-foreground">1</span>
-          <span className="font-bold">{match.odds.home.toFixed(2)}</span>
-        </Button>
-        
+        />
         {match.odds.draw !== undefined && (
-          <Button
+          <OddsButton
+            label="X"
+            odds={match.odds.draw}
+            isLive={match.isLive}
             variant={getOddsButtonVariant('draw')}
-            size="sm"
-            className="flex flex-col gap-0.5 h-auto py-2"
             onClick={() => handleOddsClick('draw', match.odds.draw!)}
-          >
-            <span className="text-xs text-muted-foreground">X</span>
-            <span className="font-bold">{match.odds.draw.toFixed(2)}</span>
-          </Button>
+          />
         )}
-        
-        <Button
+        <OddsButton
+          label="2"
+          odds={match.odds.away}
+          isLive={match.isLive}
           variant={getOddsButtonVariant('away')}
-          size="sm"
-          className={`flex flex-col gap-0.5 h-auto py-2 ${!match.odds.draw ? 'col-span-1' : ''}`}
           onClick={() => handleOddsClick('away', match.odds.away)}
-        >
-          <span className="text-xs text-muted-foreground">2</span>
-          <span className="font-bold">{match.odds.away.toFixed(2)}</span>
-        </Button>
+        />
       </div>
     </motion.div>
+  );
+}
+
+function OddsButton({
+  label,
+  odds,
+  isLive,
+  variant,
+  onClick,
+}: {
+  label: string;
+  odds: number;
+  isLive: boolean;
+  variant: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      variant={variant as any}
+      size="sm"
+      className="flex flex-col gap-0.5 h-auto py-2 relative overflow-hidden"
+      onClick={onClick}
+    >
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <motion.span
+        key={odds.toFixed(2)}
+        initial={isLive ? { color: 'hsl(142, 76%, 50%)' } : {}}
+        animate={{ color: 'inherit' }}
+        transition={{ duration: 1.5 }}
+        className="font-bold"
+      >
+        {odds.toFixed(2)}
+      </motion.span>
+      {isLive && (
+        <span className="absolute top-0.5 right-0.5 flex h-1.5 w-1.5 rounded-full bg-live animate-pulse" />
+      )}
+    </Button>
   );
 }
