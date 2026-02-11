@@ -12,6 +12,7 @@ import AdminPage from "./pages/AdminPage";
 import MatchDetailPage from "./pages/MatchDetailPage";
 import NotFound from "./pages/NotFound";
 import { AIAssistant } from "./components/ai/AIAssistant";
+import { BetNotificationsProvider } from "./components/notifications/BetNotificationsProvider";
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <BetNotificationsProvider />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/live" element={<LivePage />} />
@@ -29,7 +31,6 @@ const App = () => (
           <Route path="/account" element={<AccountPage />} />
           <Route path="/match/:id" element={<MatchDetailPage />} />
           <Route path="/admin" element={<AdminPage />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
         <AIAssistant />

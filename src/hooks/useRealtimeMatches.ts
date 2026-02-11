@@ -1,37 +1,52 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Match } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useMatches } from './useMatches';
+import { toast } from '@/hooks/use-toast';
 
-/**
- * Extends useMatches with:
- * 1. More frequent polling for live matches (every 10s)
- * 2. Client-side odds fluctuation simulation for live matches
- * 3. Supabase Realtime broadcast channel for cross-client sync
- */
 export function useRealtimeMatches() {
   const { data: apiMatches, isLoading, error, refetch } = useMatches();
   const [matches, setMatches] = useState<Match[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const prevScoresRef = useRef<Map<string, { home: number; away: number }>>(new Map());
 
   // Sync API matches into local state
   useEffect(() => {
     if (apiMatches) {
       setMatches(apiMatches);
+      // Initialize score tracking
+      apiMatches.forEach(m => {
+        if (m.isLive && m.homeTeam.score !== undefined && m.awayTeam.score !== undefined) {
+          prevScoresRef.current.set(m.id, { home: m.homeTeam.score, away: m.awayTeam.score });
+        }
+      });
     }
   }, [apiMatches]);
 
-  // Simulate live odds fluctuation every 3 seconds for live matches
+  // Simulate live odds fluctuation + score changes with toast notifications
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       setMatches(prev => prev.map(match => {
         if (!match.isLive) return match;
 
-        // Small random odds shift ±0.01–0.05
-        const shift = () => {
-          const delta = (Math.random() - 0.5) * 0.1;
-          return parseFloat(Math.max(1.01, delta).toFixed(2));
-        };
+        const homeGoal = Math.random() > 0.995 ? 1 : 0;
+        const awayGoal = Math.random() > 0.995 ? 1 : 0;
+        const newHomeScore = match.homeTeam.score !== undefined ? match.homeTeam.score + homeGoal : match.homeTeam.score;
+        const newAwayScore = match.awayTeam.score !== undefined ? match.awayTeam.score + awayGoal : match.awayTeam.score;
+
+        // Fire toast on score change
+        if (homeGoal) {
+          toast({
+            title: `⚽ GOAL! ${match.homeTeam.name}`,
+            description: `${match.homeTeam.name} ${newHomeScore} - ${newAwayScore} ${match.awayTeam.name} (${match.minute}')`,
+          });
+        }
+        if (awayGoal) {
+          toast({
+            title: `⚽ GOAL! ${match.awayTeam.name}`,
+            description: `${match.homeTeam.name} ${newHomeScore} - ${newAwayScore} ${match.awayTeam.name} (${match.minute}')`,
+          });
+        }
 
         return {
           ...match,
@@ -43,38 +58,22 @@ export function useRealtimeMatches() {
               : {}),
           },
           minute: match.minute ? match.minute + 1 : 1,
-          // Occasionally update scores for live matches
-          homeTeam: {
-            ...match.homeTeam,
-            score: match.homeTeam.score !== undefined
-              ? match.homeTeam.score + (Math.random() > 0.995 ? 1 : 0)
-              : match.homeTeam.score,
-          },
-          awayTeam: {
-            ...match.awayTeam,
-            score: match.awayTeam.score !== undefined
-              ? match.awayTeam.score + (Math.random() > 0.995 ? 1 : 0)
-              : match.awayTeam.score,
-          },
+          homeTeam: { ...match.homeTeam, score: newHomeScore },
+          awayTeam: { ...match.awayTeam, score: newAwayScore },
         };
       }));
     }, 3000);
 
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
 
-  // More frequent API polling for live data
+  // More frequent API polling
   useEffect(() => {
-    const livePolling = setInterval(() => {
-      refetch();
-    }, 15000);
-
+    const livePolling = setInterval(() => refetch(), 15000);
     return () => clearInterval(livePolling);
   }, [refetch]);
 
-  // Subscribe to Supabase Realtime broadcast channel
+  // Supabase Realtime broadcast for cross-client odds sync
   useEffect(() => {
     const channel = supabase
       .channel('live-odds')
@@ -88,15 +87,8 @@ export function useRealtimeMatches() {
       })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  return {
-    matches,
-    isLoading,
-    error,
-    liveCount: matches.filter(m => m.isLive).length,
-  };
+  return { matches, isLoading, error, liveCount: matches.filter(m => m.isLive).length };
 }
