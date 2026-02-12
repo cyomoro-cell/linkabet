@@ -3,6 +3,7 @@ import { ArrowUpRight, ArrowDownLeft, Trophy, Bot, RefreshCw } from 'lucide-reac
 import { db, Transaction } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDistanceToNow } from 'date-fns';
+import { formatCurrency } from '@/lib/currency';
 
 const typeIcons: Record<string, any> = {
   deposit: ArrowDownLeft,
@@ -23,7 +24,8 @@ const typeColors: Record<string, string> = {
 };
 
 export function TransactionHistory() {
-  const { user } = useAuth();
+  const { user, wallet } = useAuth();
+  const currency = wallet?.currency || 'USD';
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -98,11 +100,11 @@ export function TransactionHistory() {
               </div>
               <div className="text-right">
                 <p className={`font-bold ${isPositive ? 'text-success' : 'text-destructive'}`}>
-                  {isPositive ? '+' : '-'}${Math.abs(tx.net_amount).toFixed(2)}
+                  {isPositive ? '+' : '-'}{formatCurrency(Math.abs(tx.net_amount), currency)}
                 </p>
                 {tx.fee > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Fee: ${tx.fee.toFixed(2)}
+                    Fee: {formatCurrency(tx.fee, currency)}
                   </p>
                 )}
               </div>

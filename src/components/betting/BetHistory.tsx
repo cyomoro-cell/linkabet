@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { CashoutButton } from './CashoutButton';
+import { formatCurrency } from '@/lib/currency';
 
 const statusConfig: Record<string, { icon: any; color: string; label: string }> = {
   pending: { icon: Timer, color: 'bg-warning/10 text-warning', label: 'Pending' },
@@ -15,7 +16,8 @@ const statusConfig: Record<string, { icon: any; color: string; label: string }> 
 };
 
 export function BetHistory() {
-  const { user } = useAuth();
+  const { user, wallet } = useAuth();
+  const currency = wallet?.currency || 'USD';
   const [bets, setBets] = useState<Bet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -110,14 +112,14 @@ export function BetHistory() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Stake</p>
-                  <p className="font-medium">${bet.stake.toFixed(2)}</p>
+                  <p className="font-medium">{formatCurrency(bet.stake, currency)}</p>
                 </div>
               </div>
 
               <div className="mt-3 pt-3 border-t border-border flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">
                   {bet.status === 'cashout'
-                    ? `Cashed out: $${(bet.result_data?.cashout_value ?? 0).toFixed(2)}`
+                    ? `Cashed out: ${formatCurrency(bet.result_data?.cashout_value ?? 0, currency)}`
                     : `Potential Win`}
                 </span>
                 <div className="flex items-center gap-2">
@@ -125,7 +127,7 @@ export function BetHistory() {
                     <CashoutButton bet={bet} onCashout={fetchBets} />
                   )}
                   <span className={`font-bold ${bet.status === 'won' ? 'text-success' : ''}`}>
-                    ${bet.potential_win.toFixed(2)}
+                    {formatCurrency(bet.potential_win, currency)}
                   </span>
                 </div>
               </div>
