@@ -12,8 +12,8 @@ export const emailSchema = z.string().email('Invalid email address');
 
 export const phoneSchema = z
   .string()
-  .min(10, 'Phone number must be at least 10 digits')
-  .regex(/^\+?[\d\s-]+$/, 'Invalid phone number format');
+  .min(7, 'Phone number must be at least 7 digits')
+  .regex(/^[\d\s-]+$/, 'Enter your phone number without country code');
 
 export const signUpSchema = z.object({
   email: emailSchema,
