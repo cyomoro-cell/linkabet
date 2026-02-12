@@ -10,11 +10,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from '@/hooks/use-toast';
 import { signUp, signIn, signUpSchema, signInSchema, SignUpFormData, SignInFormData } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
+import CountryCodeSelect from '@/components/auth/CountryCodeSelect';
 
 export default function AuthPage() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [countryCode, setCountryCode] = useState('+1');
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -59,7 +61,9 @@ export default function AuthPage() {
 
   const handleSignUp = async (data: SignUpFormData) => {
     setIsLoading(true);
+    const fullPhone = data.phone.startsWith('+') ? data.phone : `${countryCode}${data.phone.replace(/^0+/, '')}`;
     try {
+      await signUp({ ...data, phone: fullPhone });
       await signUp(data);
       toast({
         title: 'Account created!',
@@ -240,13 +244,13 @@ export default function AuthPage() {
                         <FormItem>
                           <FormLabel>Phone Number</FormLabel>
                           <FormControl>
-                            <div className="relative">
-                              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <div className="flex">
+                              <CountryCodeSelect value={countryCode} onValueChange={setCountryCode} />
                               <Input
                                 {...field}
                                 type="tel"
-                                placeholder="+1234567890"
-                                className="pl-10"
+                                placeholder="712345678"
+                                className="rounded-l-none"
                               />
                             </div>
                           </FormControl>
