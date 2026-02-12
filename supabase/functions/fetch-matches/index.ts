@@ -32,7 +32,6 @@ function generateOdds(sport: string) {
   };
 }
 
-// Slightly shift existing odds for live matches
 function shiftOdds(odds: { home: number; draw?: number; away: number }) {
   return {
     home: parseFloat(Math.max(1.01, odds.home + (Math.random() - 0.5) * 0.08).toFixed(2)),
@@ -43,6 +42,7 @@ function shiftOdds(odds: { home: number; draw?: number; away: number }) {
   };
 }
 
+// ─── TheSportsDB (Soccer, Basketball, Tennis, Cricket, Rugby, etc.) ───
 async function fetchTheSportsDB(): Promise<Match[]> {
   const matches: Match[] = [];
   const sports = ["Soccer", "Basketball", "Tennis", "Cricket", "Rugby", "American_Football", "Ice_Hockey"];
@@ -78,12 +78,13 @@ async function fetchTheSportsDB(): Promise<Match[]> {
         }
       }
     } catch (error) {
-      console.error(`Error fetching ${sport}:`, error);
+      console.error(`Error fetching TheSportsDB ${sport}:`, error);
     }
   }
   return matches;
 }
 
+// ─── NBA (Official CDN) ───
 async function fetchNBA(): Promise<Match[]> {
   try {
     const response = await fetch(
@@ -107,6 +108,199 @@ async function fetchNBA(): Promise<Match[]> {
   }
 }
 
+// ─── MLB (Official Stats API – free, no key) ───
+async function fetchMLB(): Promise<Match[]> {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const response = await fetch(
+      `https://statsapi.mlb.com/api/v1/schedule?date=${today}&sportId=1&hydrate=linescore,team`
+    );
+    const data = await response.json();
+
+    const matches: Match[] = [];
+    for (const date of data.dates || []) {
+      for (const game of date.games || []) {
+        const statusCode = game.status?.statusCode || "";
+        const isLive = statusCode === "I" || statusCode === "MA" || statusCode === "MC";
+        const linescore = game.linescore;
+
+        matches.push({
+          id: `MLB_${game.gamePk}`,
+          sport: "baseball",
+          league: "MLB",
+          homeTeam: {
+            id: game.teams.home.team.id.toString(),
+            name: game.teams.home.team.name,
+            score: linescore?.teams?.home?.runs,
+          },
+          awayTeam: {
+            id: game.teams.away.team.id.toString(),
+            name: game.teams.away.team.name,
+            score: linescore?.teams?.away?.runs,
+          },
+          odds: generateOdds("baseball"),
+          startTime: game.gameDate || new Date().toISOString(),
+          isLive,
+          minute: linescore?.currentInning,
+        });
+      }
+    }
+    return matches;
+  } catch (error) {
+    console.error("Error fetching MLB:", error);
+    return [];
+  }
+}
+
+// ─── NHL (Official Stats API – free, no key) ───
+async function fetchNHL(): Promise<Match[]> {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const response = await fetch(
+      `https://api-web.nhle.com/v1/schedule/${today}`
+    );
+    const data = await response.json();
+
+    const matches: Match[] = [];
+    for (const week of data.gameWeek || []) {
+      for (const game of week.games || []) {
+        const state = game.gameState || "";
+        const isLive = state === "LIVE" || state === "CRIT";
+
+        matches.push({
+          id: `NHL_${game.id}`,
+          sport: "ice hockey",
+          league: "NHL",
+          homeTeam: {
+            id: game.homeTeam?.id?.toString() || `nhl_h_${game.id}`,
+            name: game.homeTeam?.placeName?.default
+              ? `${game.homeTeam.placeName.default} ${game.homeTeam.commonName?.default || ""}`
+              : "Home",
+            score: game.homeTeam?.score,
+          },
+          awayTeam: {
+            id: game.awayTeam?.id?.toString() || `nhl_a_${game.id}`,
+            name: game.awayTeam?.placeName?.default
+              ? `${game.awayTeam.placeName.default} ${game.awayTeam.commonName?.default || ""}`
+              : "Away",
+            score: game.awayTeam?.score,
+          },
+          odds: generateOdds("ice hockey"),
+          startTime: game.startTimeUTC || new Date().toISOString(),
+          isLive,
+          minute: game.periodDescriptor?.number,
+        });
+      }
+    }
+    return matches;
+  } catch (error) {
+    console.error("Error fetching NHL:", error);
+    return [];
+  }
+}
+
+// ─── ESPN (Unofficial public API – soccer leagues) ───
+async function fetchESPNSoccer(): Promise<Match[]> {
+  const leagues = [
+    { slug: "eng.1", name: "Premier League" },
+    { slug: "esp.1", name: "La Liga" },
+    { slug: "ger.1", name: "Bundesliga" },
+    { slug: "ita.1", name: "Serie A" },
+    { slug: "fra.1", name: "Ligue 1" },
+    { slug: "uefa.champions", name: "Champions League" },
+  ];
+
+  const matches: Match[] = [];
+
+  for (const league of leagues) {
+    try {
+      const response = await fetch(
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/${league.slug}/scoreboard`
+      );
+      const data = await response.json();
+
+      for (const event of (data.events || []).slice(0, 4)) {
+        const comp = event.competitions?.[0];
+        if (!comp) continue;
+
+        const home = comp.competitors?.find((c: any) => c.homeAway === "home");
+        const away = comp.competitors?.find((c: any) => c.homeAway === "away");
+        if (!home || !away) continue;
+
+        const statusType = comp.status?.type?.name || "";
+        const isLive = statusType === "STATUS_IN_PROGRESS" || statusType === "STATUS_HALFTIME";
+
+        matches.push({
+          id: `ESPN_${event.id}`,
+          sport: "football",
+          league: league.name,
+          homeTeam: {
+            id: home.team?.id || `espn_h_${event.id}`,
+            name: home.team?.displayName || "Home",
+            score: home.score ? parseInt(home.score) : undefined,
+          },
+          awayTeam: {
+            id: away.team?.id || `espn_a_${event.id}`,
+            name: away.team?.displayName || "Away",
+            score: away.score ? parseInt(away.score) : undefined,
+          },
+          odds: generateOdds("football"),
+          startTime: event.date || new Date().toISOString(),
+          isLive,
+          minute: comp.status?.displayClock ? parseInt(comp.status.displayClock) : undefined,
+        });
+      }
+    } catch (error) {
+      console.error(`Error fetching ESPN ${league.name}:`, error);
+    }
+  }
+  return matches;
+}
+
+// ─── ESPN MMA/UFC ───
+async function fetchESPNMMA(): Promise<Match[]> {
+  try {
+    const response = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard`
+    );
+    const data = await response.json();
+    const matches: Match[] = [];
+
+    for (const event of (data.events || []).slice(0, 6)) {
+      const comp = event.competitions?.[0];
+      if (!comp) continue;
+      const fighters = comp.competitors || [];
+      if (fighters.length < 2) continue;
+
+      const isLive = comp.status?.type?.name === "STATUS_IN_PROGRESS";
+
+      matches.push({
+        id: `ESPN_MMA_${event.id}`,
+        sport: "mma",
+        league: "UFC",
+        homeTeam: {
+          id: fighters[0].id || `mma_h_${event.id}`,
+          name: fighters[0].athlete?.displayName || "Fighter A",
+          score: undefined,
+        },
+        awayTeam: {
+          id: fighters[1].id || `mma_a_${event.id}`,
+          name: fighters[1].athlete?.displayName || "Fighter B",
+          score: undefined,
+        },
+        odds: generateOdds("mma"),
+        startTime: event.date || new Date().toISOString(),
+        isLive,
+      });
+    }
+    return matches;
+  } catch (error) {
+    console.error("Error fetching ESPN MMA:", error);
+    return [];
+  }
+}
+
+// ─── Mock fallback ───
 function generateMockMatches(count: number): Match[] {
   const sports = [
     { name: "football", leagues: ["Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1", "Champions League"] },
@@ -117,6 +311,7 @@ function generateMockMatches(count: number): Match[] {
     { name: "mma", leagues: ["UFC", "Bellator", "ONE Championship"] },
     { name: "ice hockey", leagues: ["NHL", "KHL", "SHL"] },
     { name: "rugby", leagues: ["Six Nations", "Super Rugby", "Premiership"] },
+    { name: "baseball", leagues: ["MLB", "NPB", "KBO"] },
   ];
   const teams: Record<string, string[]> = {
     football: ["Manchester City", "Liverpool", "Real Madrid", "Barcelona", "Bayern Munich", "PSG", "Juventus", "AC Milan", "Inter Milan", "Chelsea"],
@@ -127,6 +322,7 @@ function generateMockMatches(count: number): Match[] {
     mma: ["Fighter A", "Fighter B", "Champion X", "Contender Y"],
     "ice hockey": ["Bruins", "Rangers", "Oilers", "Panthers", "Avalanche", "Stars"],
     rugby: ["England", "France", "Ireland", "New Zealand", "South Africa", "Australia"],
+    baseball: ["Yankees", "Dodgers", "Braves", "Astros", "Mets", "Phillies", "Padres", "Orioles"],
   };
 
   const matches: Match[] = [];
@@ -138,7 +334,7 @@ function generateMockMatches(count: number): Match[] {
     let awayIdx = Math.floor(Math.random() * sportTeams.length);
     while (awayIdx === homeIdx && sportTeams.length > 1) awayIdx = Math.floor(Math.random() * sportTeams.length);
 
-    const isLive = Math.random() > 0.6; // More live matches
+    const isLive = Math.random() > 0.6;
     const startOffset = isLive ? 0 : Math.random() * 7 * 24 * 60 * 60 * 1000;
 
     matches.push({
@@ -166,14 +362,25 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Fetch from APIs
-    const [sportsDbMatches, nbaMatches] = await Promise.all([
+    // Fetch from all APIs in parallel
+    const [sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches] = await Promise.all([
       fetchTheSportsDB(),
       fetchNBA(),
+      fetchMLB(),
+      fetchNHL(),
+      fetchESPNSoccer(),
+      fetchESPNMMA(),
     ]);
 
-    const allMatches: Match[] = [...sportsDbMatches, ...nbaMatches];
-    console.log(`Fetched ${allMatches.length} matches from APIs`);
+    const allMatches: Match[] = [
+      ...sportsDbMatches,
+      ...nbaMatches,
+      ...mlbMatches,
+      ...nhlMatches,
+      ...espnSoccerMatches,
+      ...espnMmaMatches,
+    ];
+    console.log(`Fetched ${allMatches.length} matches from APIs (TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length})`);
 
     // Check existing DB matches to update live odds
     const { data: existingMatches } = await supabase
@@ -181,12 +388,10 @@ serve(async (req) => {
       .select("id, odds, is_live, minute")
       .eq("is_live", true);
 
-    // Update existing live matches with shifted odds
     if (existingMatches && existingMatches.length > 0) {
       for (const existing of existingMatches) {
         const apiMatch = allMatches.find(m => m.id === existing.id);
         if (!apiMatch) {
-          // Shift odds for existing live matches not in current API fetch
           const shifted = shiftOdds(existing.odds as any);
           const newMinute = (existing.minute || 0) + 1;
           await supabase
@@ -209,11 +414,9 @@ serve(async (req) => {
       return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
     });
 
-    // Deduplicate by ID before upserting
+    // Deduplicate by ID
     const uniqueMap = new Map<string, Match>();
-    for (const m of allMatches) {
-      uniqueMap.set(m.id, m);
-    }
+    for (const m of allMatches) uniqueMap.set(m.id, m);
     const uniqueMatches = Array.from(uniqueMap.values());
 
     const dbRows = uniqueMatches.map(m => ({
