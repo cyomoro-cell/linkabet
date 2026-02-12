@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
+import { formatCurrency } from '@/lib/currency';
 
 export function BetSlip() {
   const { 
@@ -21,6 +22,7 @@ export function BetSlip() {
 
   const totalOdds = getTotalOdds();
   const potentialWin = getPotentialWin();
+  const currency = wallet?.currency || 'USD';
   const balance = wallet?.balance ? Number(wallet.balance) : 0;
 
   const handlePlaceBet = async () => {
@@ -35,7 +37,7 @@ export function BetSlip() {
     }
 
     if (stake > balance) {
-      toast({ title: 'Insufficient balance', description: `Your balance is $${balance.toFixed(2)}`, variant: 'destructive' });
+      toast({ title: 'Insufficient balance', description: `Your balance is ${formatCurrency(balance, currency)}`, variant: 'destructive' });
       return;
     }
 
@@ -89,7 +91,7 @@ export function BetSlip() {
 
       await refreshWallet();
       clearAll();
-      toast({ title: 'Bet placed!', description: `$${stake.toFixed(2)} staked at ${totalOdds.toFixed(2)} odds` });
+      toast({ title: 'Bet placed!', description: `${formatCurrency(stake, currency)} staked at ${totalOdds.toFixed(2)} odds` });
     } catch (error: any) {
       toast({ title: 'Failed to place bet', description: error.message, variant: 'destructive' });
     } finally {
@@ -167,7 +169,7 @@ export function BetSlip() {
         <div className="space-y-2">
           <label className="text-sm text-muted-foreground">Stake</label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">{currency}</span>
             <Input
               type="number"
               value={stake}
@@ -177,13 +179,13 @@ export function BetSlip() {
             />
           </div>
           {isAuthenticated && (
-            <p className="text-xs text-muted-foreground">Balance: ${balance.toFixed(2)}</p>
+            <p className="text-xs text-muted-foreground">Balance: {formatCurrency(balance, currency)}</p>
           )}
         </div>
 
         <div className="flex items-center justify-between py-3 px-4 rounded-lg bg-primary/10 border border-primary/20">
           <span className="font-medium">Potential Win</span>
-          <span className="text-xl font-bold text-primary">${potentialWin.toFixed(2)}</span>
+          <span className="text-xl font-bold text-primary">{formatCurrency(potentialWin, currency)}</span>
         </div>
 
         <Button 

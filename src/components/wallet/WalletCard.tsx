@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/supabase';
+import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 
 const FEE_PERCENTAGE = 0.05; // 5% fee
 
@@ -17,6 +18,10 @@ export function WalletCard() {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const currency = wallet?.currency || 'USD';
+  const sym = getCurrencySymbol(currency);
+  const balance = wallet?.balance ? Number(wallet.balance) : 0;
 
   const handleDeposit = async () => {
     if (!user || !amount) return;
@@ -32,7 +37,6 @@ export function WalletCard() {
       const fee = depositAmount * FEE_PERCENTAGE;
       const netAmount = depositAmount - fee;
 
-      // Create transaction
       const { error: txError } = await db
         .from('transactions')
         .insert({
@@ -41,14 +45,12 @@ export function WalletCard() {
           amount: depositAmount,
           fee: fee,
           net_amount: netAmount,
-          description: `Deposit of $${depositAmount.toFixed(2)} (5% fee: $${fee.toFixed(2)})`,
+          description: `Deposit of ${formatCurrency(depositAmount, currency)} (5% fee: ${formatCurrency(fee, currency)})`,
         });
 
       if (txError) throw txError;
 
-      // Update wallet balance
-      const currentBal = wallet?.balance ? Number(wallet.balance) : 0;
-      const newBalance = currentBal + netAmount;
+      const newBalance = balance + netAmount;
       const { error: walletError } = await db
         .from('wallets')
         .update({ balance: newBalance, updated_at: new Date().toISOString() })
@@ -61,14 +63,10 @@ export function WalletCard() {
       setAmount('');
       toast({
         title: 'Deposit successful!',
-        description: `$${netAmount.toFixed(2)} added to your wallet (after 5% fee)`,
+        description: `${formatCurrency(netAmount, currency)} added to your wallet (after 5% fee)`,
       });
     } catch (error: any) {
-      toast({
-        title: 'Deposit failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Deposit failed', description: error.message, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -83,8 +81,7 @@ export function WalletCard() {
       return;
     }
 
-    const currentBalance = wallet?.balance ? Number(wallet.balance) : 0;
-    if (withdrawAmount > currentBalance) {
+    if (withdrawAmount > balance) {
       toast({ title: 'Insufficient balance', variant: 'destructive' });
       return;
     }
@@ -94,7 +91,6 @@ export function WalletCard() {
       const fee = withdrawAmount * FEE_PERCENTAGE;
       const netAmount = withdrawAmount - fee;
 
-      // Create transaction
       const { error: txError } = await db
         .from('transactions')
         .insert({
@@ -103,13 +99,12 @@ export function WalletCard() {
           amount: withdrawAmount,
           fee: fee,
           net_amount: netAmount,
-          description: `Withdrawal of $${withdrawAmount.toFixed(2)} (5% fee: $${fee.toFixed(2)})`,
+          description: `Withdrawal of ${formatCurrency(withdrawAmount, currency)} (5% fee: ${formatCurrency(fee, currency)})`,
         });
 
       if (txError) throw txError;
 
-      // Update wallet balance
-      const newBalance = currentBalance - withdrawAmount;
+      const newBalance = balance - withdrawAmount;
       const { error: walletError } = await db
         .from('wallets')
         .update({ balance: newBalance, updated_at: new Date().toISOString() })
@@ -122,20 +117,14 @@ export function WalletCard() {
       setAmount('');
       toast({
         title: 'Withdrawal successful!',
-        description: `$${netAmount.toFixed(2)} will be sent (after 5% fee)`,
+        description: `${formatCurrency(netAmount, currency)} will be sent (after 5% fee)`,
       });
     } catch (error: any) {
-      toast({
-        title: 'Withdrawal failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Withdrawal failed', description: error.message, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
   };
-
-  const balance = wallet?.balance ? Number(wallet.balance) : 0;
 
   return (
     <div className="rounded-xl border border-border bg-card p-6">
@@ -145,7 +134,7 @@ export function WalletCard() {
         </div>
         <div>
           <p className="text-sm text-muted-foreground">Available Balance</p>
-          <p className="text-2xl font-bold">${balance.toFixed(2)}</p>
+          <p className="text-2xl font-bold">{formatCurrency(balance, currency)}</p>
         </div>
       </div>
 
@@ -163,7 +152,7 @@ export function WalletCard() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Amount (USD)</Label>
+                <Label>Amount ({currency})</Label>
                 <Input
                   type="number"
                   placeholder="Enter amount"
@@ -176,15 +165,15 @@ export function WalletCard() {
                 <div className="p-3 rounded-lg bg-secondary/50 space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
-                    <span>${parseFloat(amount).toFixed(2)}</span>
+                    <span>{formatCurrency(parseFloat(amount), currency)}</span>
                   </div>
                   <div className="flex justify-between text-destructive">
                     <span>Fee (5%)</span>
-                    <span>-${(parseFloat(amount) * 0.05).toFixed(2)}</span>
+                    <span>-{formatCurrency(parseFloat(amount) * 0.05, currency)}</span>
                   </div>
                   <div className="flex justify-between font-bold border-t border-border pt-1">
                     <span>You receive</span>
-                    <span className="text-primary">${(parseFloat(amount) * 0.95).toFixed(2)}</span>
+                    <span className="text-primary">{formatCurrency(parseFloat(amount) * 0.95, currency)}</span>
                   </div>
                 </div>
               )}
@@ -208,7 +197,7 @@ export function WalletCard() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Amount (USD)</Label>
+                <Label>Amount ({currency})</Label>
                 <Input
                   type="number"
                   placeholder="Enter amount"
@@ -218,22 +207,22 @@ export function WalletCard() {
                   max={balance}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Available: ${balance.toFixed(2)}
+                  Available: {formatCurrency(balance, currency)}
                 </p>
               </div>
               {amount && parseFloat(amount) > 0 && (
                 <div className="p-3 rounded-lg bg-secondary/50 space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount</span>
-                    <span>${parseFloat(amount).toFixed(2)}</span>
+                    <span>{formatCurrency(parseFloat(amount), currency)}</span>
                   </div>
                   <div className="flex justify-between text-destructive">
                     <span>Fee (5%)</span>
-                    <span>-${(parseFloat(amount) * 0.05).toFixed(2)}</span>
+                    <span>-{formatCurrency(parseFloat(amount) * 0.05, currency)}</span>
                   </div>
                   <div className="flex justify-between font-bold border-t border-border pt-1">
                     <span>You receive</span>
-                    <span className="text-primary">${(parseFloat(amount) * 0.95).toFixed(2)}</span>
+                    <span className="text-primary">{formatCurrency(parseFloat(amount) * 0.95, currency)}</span>
                   </div>
                 </div>
               )}

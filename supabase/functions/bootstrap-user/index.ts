@@ -7,6 +7,27 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Dial code → currency code mapping
+const DIAL_TO_CURRENCY: Record<string, string> = {
+  '+1': 'USD', '+44': 'GBP', '+234': 'NGN', '+233': 'GHS', '+254': 'KES',
+  '+27': 'ZAR', '+255': 'TZS', '+256': 'UGX', '+250': 'RWF', '+251': 'ETB',
+  '+237': 'XAF', '+225': 'XOF', '+221': 'XOF', '+243': 'CDF', '+258': 'MZN',
+  '+260': 'ZMW', '+265': 'MWK', '+267': 'BWP', '+91': 'INR', '+92': 'PKR',
+  '+880': 'BDT', '+63': 'PHP', '+55': 'BRL', '+52': 'MXN', '+49': 'EUR',
+  '+33': 'EUR', '+34': 'EUR', '+39': 'EUR', '+351': 'EUR', '+971': 'AED',
+  '+966': 'SAR', '+20': 'EGP', '+212': 'MAD', '+61': 'AUD', '+81': 'JPY',
+  '+86': 'CNY', '+7': 'RUB', '+90': 'TRY',
+};
+
+function getCurrencyFromPhone(phone: string | null): string {
+  if (!phone) return 'USD';
+  for (let len = 4; len >= 1; len--) {
+    const prefix = phone.substring(0, len + 1);
+    if (DIAL_TO_CURRENCY[prefix]) return DIAL_TO_CURRENCY[prefix];
+  }
+  return 'USD';
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -73,6 +94,9 @@ serve(async (req) => {
     }
 
     // Ensure wallet exists
+    const phone = (user.user_metadata?.phone as string | undefined) ?? null;
+    const detectedCurrency = getCurrencyFromPhone(phone);
+
     const ensureWallet = async () => {
       const { data: existingWallet, error: walletLookupError } = await admin
         .from("wallets")
@@ -87,7 +111,7 @@ serve(async (req) => {
         const { error: walletInsertError } = await admin.from("wallets").insert({
           user_id: user.id,
           balance: 0.0,
-          currency: "USD",
+          currency: detectedCurrency,
         });
         if (walletInsertError) throw walletInsertError;
       }
@@ -137,7 +161,7 @@ serve(async (req) => {
         });
       }
 
-      const phone = (user.user_metadata?.phone as string | undefined) ?? null;
+      // phone already extracted above
       const username =
         (user.user_metadata?.username as string | undefined) || email.split("@")[0];
 

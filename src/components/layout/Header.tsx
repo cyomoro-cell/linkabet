@@ -4,6 +4,7 @@ import { Menu, X, Wallet, User, Trophy, Zap, Gamepad2, Search, LogIn } from 'luc
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
+import { formatCurrency } from '@/lib/currency';
 const navLinks = [
   { href: '/', label: 'Sports', icon: Trophy },
   { href: '/live', label: 'Live', icon: Zap, isLive: true },
@@ -15,6 +16,7 @@ export function Header() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, wallet } = useAuth();
+  const currency = wallet?.currency || 'USD';
   const balance = parseFloat(wallet?.balance?.toString() || '0');
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -64,7 +66,7 @@ export function Header() {
             <>
               <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary">
                 <Wallet className="h-4 w-4 text-primary" />
-                <span className="font-bold">${balance.toFixed(2)}</span>
+                <span className="font-bold">{formatCurrency(balance, currency)}</span>
               </div>
 
               <Link to="/account">
@@ -128,7 +130,7 @@ export function Header() {
                 <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
                   <div className="flex items-center gap-2">
                     <Wallet className="h-4 w-4 text-primary" />
-                    <span className="font-bold">${balance.toFixed(2)}</span>
+                    <span className="font-bold">{formatCurrency(balance, currency)}</span>
                   </div>
                   <Link to="/account">
                     <Button variant="hero" size="sm">
