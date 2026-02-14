@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { WalletCard } from '@/components/wallet/WalletCard';
 import { TransactionHistory } from '@/components/wallet/TransactionHistory';
+import { CurrencySwitcher } from '@/components/wallet/CurrencySwitcher';
 import { BetHistory } from '@/components/betting/BetHistory';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -92,6 +93,9 @@ export default function AccountPage() {
 
             {/* Wallet Card */}
             <WalletCard />
+
+            {/* Currency Switcher */}
+            <CurrencySwitcher />
 
             {/* Transaction History */}
             <TransactionHistory />
