@@ -1,8 +1,7 @@
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { HeroSection } from '@/components/sections/HeroSection';
-import { FeaturedMatches } from '@/components/sections/FeaturedMatches';
-import { LiveMatches } from '@/components/sections/LiveMatches';
+import { MatchTabs } from '@/components/sections/MatchTabs';
 import { PromotionsSection } from '@/components/sections/PromotionsSection';
 import { BetSlip } from '@/components/betting/BetSlip';
 import { DesktopSportSidebar, MobileSportSidebar } from '@/components/layout/SportSidebar';
@@ -65,8 +64,7 @@ const Index = () => {
             </div>
           ) : (
             <>
-              <LiveMatches matches={filteredMatches} />
-              <FeaturedMatches matches={filteredMatches} />
+              <MatchTabs matches={filteredMatches} />
             </>
           )}
           <PromotionsSection promotions={mockPromotions} />
