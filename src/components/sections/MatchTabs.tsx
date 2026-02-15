@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Match } from '@/types';
 import { MatchCard } from '@/components/matches/MatchCard';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Clock, TrendingUp } from 'lucide-react';
+import { Zap, Clock, TrendingUp, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 type TabKey = 'live' | 'upcoming' | 'popular';
 
@@ -53,48 +55,57 @@ export function MatchTabs({ matches }: MatchTabsProps) {
     <section className="py-8">
       <div className="container">
         {/* Tab Bar */}
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-secondary/50 mb-6 w-fit">
-          {tabs.map(tab => {
-            const isActive = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="activeMatchTab"
-                    className={`absolute inset-0 rounded-lg ${
-                      tab.key === 'live' ? 'bg-live' : 'bg-primary'
-                    }`}
-                    transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
-                  />
-                )}
-                <span className="relative flex items-center gap-2">
-                  {tab.icon}
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  {tab.count !== undefined && tab.count > 0 && (
-                    <Badge
-                      variant={isActive && tab.key === 'live' ? 'outline' : 'secondary'}
-                      className={`text-[10px] px-1.5 py-0 h-5 ${
-                        isActive ? 'border-primary-foreground/30 text-primary-foreground' : ''
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-secondary/50 w-fit">
+            {tabs.map(tab => {
+              const isActive = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    isActive
+                      ? 'text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeMatchTab"
+                      className={`absolute inset-0 rounded-lg ${
+                        tab.key === 'live' ? 'bg-live' : 'bg-primary'
                       }`}
-                    >
-                      {tab.count}
-                    </Badge>
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+                    />
                   )}
-                  {tab.key === 'live' && liveMatches.length > 0 && !isActive && (
-                    <span className="flex h-2 w-2 rounded-full bg-live animate-pulse" />
-                  )}
-                </span>
-              </button>
-            );
-          })}
+                  <span className="relative flex items-center gap-2">
+                    {tab.icon}
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    {tab.count !== undefined && tab.count > 0 && (
+                      <Badge
+                        variant={isActive && tab.key === 'live' ? 'outline' : 'secondary'}
+                        className={`text-[10px] px-1.5 py-0 h-5 ${
+                          isActive ? 'border-primary-foreground/30 text-primary-foreground' : ''
+                        }`}
+                      >
+                        {tab.count}
+                      </Badge>
+                    )}
+                    {tab.key === 'live' && liveMatches.length > 0 && !isActive && (
+                      <span className="flex h-2 w-2 rounded-full bg-live animate-pulse" />
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/matches?tab=${activeTab}`}>
+              View All
+              <ArrowRight className="h-4 w-4 ml-1" />
+            </Link>
+          </Button>
         </div>
 
         {/* Match Grid */}

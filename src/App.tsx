@@ -10,6 +10,7 @@ import AuthPage from "./pages/AuthPage";
 import AccountPage from "./pages/AccountPage";
 import AdminPage from "./pages/AdminPage";
 import MatchDetailPage from "./pages/MatchDetailPage";
+import MatchesPage from "./pages/MatchesPage";
 import NotFound from "./pages/NotFound";
 import { AIAssistant } from "./components/ai/AIAssistant";
 import { BetNotificationsProvider } from "./components/notifications/BetNotificationsProvider";
@@ -26,6 +27,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/live" element={<LivePage />} />
+          <Route path="/matches" element={<MatchesPage />} />
           <Route path="/casino" element={<CasinoPage />} />
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/account" element={<AccountPage />} />
