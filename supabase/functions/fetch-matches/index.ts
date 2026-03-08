@@ -644,7 +644,7 @@ serve(async (req) => {
       .from("matches")
       .delete()
       .eq("is_live", false)
-      .lt("start_time", threeHoursAgo)
+      .lt("start_time", threeMinutesAgo)
       .select("id");
 
     if (delPastErr) {
