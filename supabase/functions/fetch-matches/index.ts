@@ -634,6 +634,39 @@ serve(async (req) => {
       console.log(`Upserted ${dbRows.length} matches into DB`);
     }
 
+    // ─── Auto-remove ended matches ───
+    // Remove non-live matches whose start_time is more than 3 hours ago
+    // and live matches whose minute exceeds 120 (full time + extra time buffer)
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    
+    // Delete old non-live matches (finished/past)
+    const { data: deletedPast, error: delPastErr } = await supabase
+      .from("matches")
+      .delete()
+      .eq("is_live", false)
+      .lt("start_time", threeHoursAgo)
+      .select("id");
+
+    if (delPastErr) {
+      console.error("Error deleting past matches:", delPastErr);
+    } else if (deletedPast && deletedPast.length > 0) {
+      console.log(`Removed ${deletedPast.length} ended (past) matches`);
+    }
+
+    // Delete live matches that have exceeded 120 minutes (match ended)
+    const { data: deletedEnded, error: delEndedErr } = await supabase
+      .from("matches")
+      .delete()
+      .eq("is_live", true)
+      .gt("minute", 120)
+      .select("id");
+
+    if (delEndedErr) {
+      console.error("Error deleting ended live matches:", delEndedErr);
+    } else if (deletedEnded && deletedEnded.length > 0) {
+      console.log(`Removed ${deletedEnded.length} ended (overtime) live matches`);
+    }
+
     return new Response(JSON.stringify({ matches: allMatches, count: allMatches.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
