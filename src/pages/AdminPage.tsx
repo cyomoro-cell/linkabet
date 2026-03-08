@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Users, Wallet, Trophy, TrendingUp, Bot, Settings, Ban, CheckCircle, XCircle, UserCog } from 'lucide-react';
+import { Shield, Users, Wallet, Trophy, TrendingUp, Bot, Settings, Ban, CheckCircle, XCircle, DollarSign } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/supabase';
+import { formatCurrency } from '@/lib/currency';
+import { formatDistanceToNow } from 'date-fns';
 
 interface Stats {
   totalUsers: number;
@@ -53,8 +54,8 @@ export default function AdminPage() {
         db.from('bets').select('*', { count: 'exact', head: true }),
         db.from('bets').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
         db.from('transactions').select('*', { count: 'exact', head: true }).eq('type', 'withdrawal').eq('status', 'pending'),
-        db.from('transactions').select('amount').eq('type', 'deposit'),
-        db.from('transactions').select('amount').eq('type', 'withdrawal'),
+        db.from('transactions').select('amount').eq('type', 'deposit').eq('status', 'approved'),
+        db.from('transactions').select('amount').eq('type', 'withdrawal').eq('status', 'approved'),
         db.from('ai_usage').select('*', { count: 'exact', head: true }),
       ]);
       setStats({
@@ -78,7 +79,6 @@ export default function AdminPage() {
     );
   }
 
-  // Logged in but not allowed
   if (user && !isAdmin && !isMaster) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -94,11 +94,9 @@ export default function AdminPage() {
                 <p className="text-sm text-muted-foreground">Your role is <span className="capitalize font-medium">{role}</span>.</p>
               </div>
             </div>
-
             <p className="text-sm text-muted-foreground">
               If this is a fresh project, the first account that signs in becomes <span className="font-medium">master</span> automatically.
             </p>
-
             <div className="flex flex-col sm:flex-row gap-3 mt-6">
               <Button variant="hero" onClick={() => navigate('/account')}>Go to Account</Button>
               <Button variant="outline" onClick={() => navigate('/')}>Back to Sports</Button>
@@ -129,8 +127,8 @@ export default function AdminPage() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard icon={Users} label="Total Users" value={stats.totalUsers} color="text-primary" />
           <StatCard icon={Trophy} label="Total Bets" value={stats.totalBets} subValue={`${stats.pendingBets} pending`} color="text-warning" />
-          <StatCard icon={Wallet} label="Deposits" value={`$${stats.totalDeposits.toFixed(2)}`} color="text-success" />
-          <StatCard icon={TrendingUp} label="Withdrawals" value={`$${stats.totalWithdrawals.toFixed(2)}`} subValue={`${stats.pendingWithdrawals} pending`} color="text-destructive" />
+          <StatCard icon={Wallet} label="Deposits" value={formatCurrency(stats.totalDeposits)} color="text-success" />
+          <StatCard icon={TrendingUp} label="Withdrawals" value={formatCurrency(stats.totalWithdrawals)} subValue={`${stats.pendingWithdrawals} pending`} color="text-destructive" />
         </div>
 
         <Tabs defaultValue="users" className="space-y-6">
@@ -175,7 +173,7 @@ function UsersTab({ isMaster }: { isMaster: boolean }) {
   const fetchUsers = async () => {
     const { data } = await db
       .from('profiles')
-      .select('*, user_roles(role), wallets(balance)')
+      .select('*, user_roles(role), wallets(balance, currency)')
       .order('created_at', { ascending: false })
       .limit(50);
     if (data) setUsers(data);
@@ -225,8 +223,10 @@ function UsersTab({ isMaster }: { isMaster: boolean }) {
           </thead>
           <tbody>
             {users.map((u) => {
-              const role = u.user_roles?.[0]?.role || 'user';
+              const userRole = u.user_roles?.[0]?.role || 'user';
               const banned = u.is_banned;
+              const currency = u.wallets?.[0]?.currency || 'USD';
+              const balance = parseFloat(u.wallets?.[0]?.balance || 0);
               return (
                 <tr key={u.id} className="border-t border-border hover:bg-secondary/30">
                   <td className="p-4">
@@ -234,8 +234,8 @@ function UsersTab({ isMaster }: { isMaster: boolean }) {
                     <p className="text-sm text-muted-foreground">{u.phone || 'No phone'}</p>
                   </td>
                   <td className="p-4">
-                    {isMaster && role !== 'master' ? (
-                      <Select defaultValue={role} onValueChange={(v) => handleRoleChange(u.id, v)}>
+                    {isMaster && userRole !== 'master' ? (
+                      <Select defaultValue={userRole} onValueChange={(v) => handleRoleChange(u.id, v)}>
                         <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="user">User</SelectItem>
@@ -243,10 +243,10 @@ function UsersTab({ isMaster }: { isMaster: boolean }) {
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Badge variant="secondary" className="capitalize">{role}</Badge>
+                      <Badge variant="secondary" className="capitalize">{userRole}</Badge>
                     )}
                   </td>
-                  <td className="p-4 font-medium">${parseFloat(u.wallets?.[0]?.balance || 0).toFixed(2)}</td>
+                  <td className="p-4 font-medium">{formatCurrency(balance, currency)}</td>
                   <td className="p-4">
                     {banned ? (
                       <Badge variant="destructive">Banned</Badge>
@@ -255,7 +255,7 @@ function UsersTab({ isMaster }: { isMaster: boolean }) {
                     )}
                   </td>
                   <td className="p-4">
-                    {role !== 'master' && (
+                    {userRole !== 'master' && (
                       <Button
                         variant={banned ? 'outline' : 'destructive'}
                         size="sm"
@@ -268,6 +268,9 @@ function UsersTab({ isMaster }: { isMaster: boolean }) {
                 </tr>
               );
             })}
+            {users.length === 0 && (
+              <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">No users yet</td></tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -284,7 +287,7 @@ function WithdrawalsTab() {
   const fetchWithdrawals = async () => {
     const { data } = await db
       .from('transactions')
-      .select('*, profiles(email)')
+      .select('*, profiles(email, phone)')
       .eq('type', 'withdrawal')
       .order('created_at', { ascending: false })
       .limit(50);
@@ -307,11 +310,10 @@ function WithdrawalsTab() {
   };
 
   const handleReject = async (tx: any) => {
-    // Refund the amount back to wallet
     const { error: txError } = await db.from('transactions')
       .update({ status: 'rejected' })
       .eq('id', tx.id);
-    
+
     if (txError) {
       toast({ title: 'Failed', description: txError.message, variant: 'destructive' });
       return;
@@ -324,6 +326,17 @@ function WithdrawalsTab() {
         .update({ balance: Number(walletData.balance) + Number(tx.amount) })
         .eq('user_id', tx.user_id);
     }
+
+    // Create refund transaction
+    await db.from('transactions').insert({
+      user_id: tx.user_id,
+      type: 'refund',
+      amount: Number(tx.amount),
+      fee: 0,
+      net_amount: Number(tx.amount),
+      description: `Refund: Withdrawal rejected`,
+      status: 'approved',
+    });
 
     toast({ title: 'Withdrawal rejected & refunded' });
     fetchWithdrawals();
@@ -341,6 +354,7 @@ function WithdrawalsTab() {
               <th className="text-left p-4 font-medium">Amount</th>
               <th className="text-left p-4 font-medium">Fee</th>
               <th className="text-left p-4 font-medium">Net</th>
+              <th className="text-left p-4 font-medium">Date</th>
               <th className="text-left p-4 font-medium">Status</th>
               <th className="text-left p-4 font-medium">Actions</th>
             </tr>
@@ -349,9 +363,12 @@ function WithdrawalsTab() {
             {withdrawals.map((tx) => (
               <tr key={tx.id} className="border-t border-border hover:bg-secondary/30">
                 <td className="p-4 text-sm">{tx.profiles?.email || 'Unknown'}</td>
-                <td className="p-4 font-medium">${Number(tx.amount).toFixed(2)}</td>
-                <td className="p-4 text-muted-foreground">${Number(tx.fee || 0).toFixed(2)}</td>
-                <td className="p-4 font-medium">${Number(tx.net_amount).toFixed(2)}</td>
+                <td className="p-4 font-medium">{formatCurrency(Number(tx.amount))}</td>
+                <td className="p-4 text-muted-foreground">{formatCurrency(Number(tx.fee || 0))}</td>
+                <td className="p-4 font-medium">{formatCurrency(Number(tx.net_amount))}</td>
+                <td className="p-4 text-sm text-muted-foreground">
+                  {tx.created_at ? formatDistanceToNow(new Date(tx.created_at), { addSuffix: true }) : '—'}
+                </td>
                 <td className="p-4">
                   <Badge className={
                     tx.status === 'approved' ? 'bg-success/10 text-success' :
@@ -376,7 +393,7 @@ function WithdrawalsTab() {
               </tr>
             ))}
             {withdrawals.length === 0 && (
-              <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No withdrawals yet</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No withdrawals yet</td></tr>
             )}
           </tbody>
         </table>
@@ -388,19 +405,64 @@ function WithdrawalsTab() {
 function BetsTab() {
   const [bets, setBets] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchBets = async () => {
-      const { data } = await db
-        .from('bets')
-        .select('*, profiles(email)')
-        .order('created_at', { ascending: false })
-        .limit(50);
-      if (data) setBets(data);
-      setIsLoading(false);
-    };
-    fetchBets();
-  }, []);
+  const fetchBets = async () => {
+    const { data } = await db
+      .from('bets')
+      .select('*, profiles(email)')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (data) setBets(data);
+    setIsLoading(false);
+  };
+
+  useEffect(() => { fetchBets(); }, []);
+
+  const handleSettle = async (bet: any, result: 'won' | 'lost') => {
+    try {
+      // Update bet status
+      const { error: betError } = await db.from('bets')
+        .update({
+          status: result,
+          settled_at: new Date().toISOString(),
+          result_data: { settled_by: 'admin', result },
+        })
+        .eq('id', bet.id);
+
+      if (betError) throw betError;
+
+      // If won, credit the user's wallet with winnings and create a win transaction
+      if (result === 'won') {
+        const { data: walletData } = await db.from('wallets')
+          .select('balance')
+          .eq('user_id', bet.user_id)
+          .single();
+
+        if (walletData) {
+          const newBalance = Number(walletData.balance) + Number(bet.potential_win);
+          await db.from('wallets')
+            .update({ balance: newBalance, updated_at: new Date().toISOString() })
+            .eq('user_id', bet.user_id);
+        }
+
+        await db.from('transactions').insert({
+          user_id: bet.user_id,
+          type: 'win',
+          amount: Number(bet.potential_win),
+          fee: 0,
+          net_amount: Number(bet.potential_win),
+          description: `Won bet: ${bet.match_data?.homeTeam?.name || 'Team A'} vs ${bet.match_data?.awayTeam?.name || 'Team B'}`,
+          status: 'approved',
+        });
+      }
+
+      toast({ title: result === 'won' ? 'Bet settled as WON — user credited' : 'Bet settled as LOST' });
+      fetchBets();
+    } catch (error: any) {
+      toast({ title: 'Settlement failed', description: error.message, variant: 'destructive' });
+    }
+  };
 
   if (isLoading) return <div className="animate-pulse h-32 bg-secondary rounded-lg" />;
 
@@ -412,31 +474,59 @@ function BetsTab() {
             <tr>
               <th className="text-left p-4 font-medium">User</th>
               <th className="text-left p-4 font-medium">Match</th>
+              <th className="text-left p-4 font-medium">Selection</th>
               <th className="text-left p-4 font-medium">Stake</th>
               <th className="text-left p-4 font-medium">Odds</th>
+              <th className="text-left p-4 font-medium">Potential Win</th>
+              <th className="text-left p-4 font-medium">Date</th>
               <th className="text-left p-4 font-medium">Status</th>
+              <th className="text-left p-4 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {bets.map((bet) => (
-              <tr key={bet.id} className="border-t border-border hover:bg-secondary/30">
-                <td className="p-4 text-sm">{bet.profiles?.email}</td>
-                <td className="p-4">
-                  <p className="font-medium">{bet.match_data?.homeTeam?.name} vs {bet.match_data?.awayTeam?.name}</p>
-                </td>
-                <td className="p-4 font-medium">${Number(bet.stake).toFixed(2)}</td>
-                <td className="p-4">{Number(bet.total_odds).toFixed(2)}</td>
-                <td className="p-4">
-                  <Badge className={
-                    bet.status === 'won' ? 'bg-success/10 text-success' :
-                    bet.status === 'lost' ? 'bg-destructive/10 text-destructive' :
-                    'bg-warning/10 text-warning'
-                  }>{bet.status}</Badge>
-                </td>
-              </tr>
-            ))}
+            {bets.map((bet) => {
+              const selections = Array.isArray(bet.selections) ? bet.selections : [bet.selections];
+              const selectionLabel = selections.map((s: any) => s?.selection || '—').join(', ');
+
+              return (
+                <tr key={bet.id} className="border-t border-border hover:bg-secondary/30">
+                  <td className="p-4 text-sm">{bet.profiles?.email || '—'}</td>
+                  <td className="p-4">
+                    <p className="font-medium text-sm">{bet.match_data?.homeTeam?.name} vs {bet.match_data?.awayTeam?.name}</p>
+                    <p className="text-xs text-muted-foreground">{bet.match_data?.league}</p>
+                  </td>
+                  <td className="p-4 text-sm capitalize">{selectionLabel}</td>
+                  <td className="p-4 font-medium">{formatCurrency(Number(bet.stake))}</td>
+                  <td className="p-4">{Number(bet.total_odds).toFixed(2)}</td>
+                  <td className="p-4 font-medium text-primary">{formatCurrency(Number(bet.potential_win))}</td>
+                  <td className="p-4 text-sm text-muted-foreground">
+                    {bet.created_at ? formatDistanceToNow(new Date(bet.created_at), { addSuffix: true }) : '—'}
+                  </td>
+                  <td className="p-4">
+                    <Badge className={
+                      bet.status === 'won' ? 'bg-success/10 text-success' :
+                      bet.status === 'lost' ? 'bg-destructive/10 text-destructive' :
+                      bet.status === 'cashout' ? 'bg-primary/10 text-primary' :
+                      'bg-warning/10 text-warning'
+                    }>{bet.status}</Badge>
+                  </td>
+                  <td className="p-4">
+                    {bet.status === 'pending' && (
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="text-success border-success/30" onClick={() => handleSettle(bet, 'won')}>
+                          <CheckCircle className="h-3 w-3 mr-1" />Won
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-destructive border-destructive/30" onClick={() => handleSettle(bet, 'lost')}>
+                          <XCircle className="h-3 w-3 mr-1" />Lost
+                        </Button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {bets.length === 0 && (
-              <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">No bets yet</td></tr>
+              <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">No bets yet</td></tr>
             )}
           </tbody>
         </table>
@@ -467,8 +557,8 @@ function SettingsTab() {
       { key: 'withdrawals_enabled', value: true, description: 'Allow withdrawals' },
       { key: 'deposit_fee_percentage', value: 5, description: 'Deposit fee percentage' },
       { key: 'withdrawal_fee_percentage', value: 5, description: 'Withdrawal fee percentage' },
-      { key: 'min_bet_amount', value: 1, description: 'Minimum bet amount' },
-      { key: 'max_bet_amount', value: 10000, description: 'Maximum bet amount' },
+      { key: 'min_bet_amount', value: 1, description: 'Minimum bet amount (USD)' },
+      { key: 'max_bet_amount', value: 10000, description: 'Maximum bet amount (USD)' },
     ];
 
     for (const d of defaults) {
@@ -489,9 +579,9 @@ function SettingsTab() {
     await db.from('system_settings')
       .update({ value, updated_by: user?.id, updated_at: new Date().toISOString() })
       .eq('key', key);
-    
+
     setSettings(prev => prev.map(s => s.key === key ? { ...s, value } : s));
-    toast({ title: `${key} updated` });
+    toast({ title: `${key.replace(/_/g, ' ')} updated` });
   };
 
   if (isLoading) return <div className="animate-pulse h-32 bg-secondary rounded-lg" />;
