@@ -701,7 +701,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Fetched ${allMatches.length} matches (SportMonks: ${sportMonksMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length}). Real odds applied to ${oddsOverlayCount} matches.`);
+    console.log(`Fetched ${allMatches.length} matches (SportMonks: ${sportMonksMatches.length}, RapidAPI: ${rapidApiMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length}). Real odds applied to ${oddsOverlayCount} matches.`);
 
     // Check existing DB matches to update live odds
     const { data: existingMatches } = await supabase
