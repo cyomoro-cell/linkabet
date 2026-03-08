@@ -28,23 +28,27 @@ serve(async (req) => {
     // Create Supabase client with service role
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
+    // Check if user is admin or master (free AI access)
+    const { data: isAdminOrMaster } = await supabase.rpc("is_admin_or_master", { _user_id: userId });
+
     // Check if user is within free trial (10 days from account creation)
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("created_at")
-      .eq("id", userId)
-      .single();
-
-    const FREE_TRIAL_DAYS = 10;
     let isFreeTrial = false;
+    if (!isAdminOrMaster) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("created_at")
+        .eq("id", userId)
+        .single();
 
-    if (profile?.created_at) {
-      const createdAt = new Date(profile.created_at);
-      const now = new Date();
-      const diffMs = now.getTime() - createdAt.getTime();
-      const diffDays = diffMs / (1000 * 60 * 60 * 24);
-      isFreeTrial = diffDays <= FREE_TRIAL_DAYS;
+      const FREE_TRIAL_DAYS = 10;
+      if (profile?.created_at) {
+        const createdAt = new Date(profile.created_at);
+        const diffDays = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+        isFreeTrial = diffDays <= FREE_TRIAL_DAYS;
+      }
     }
+
+    const isFreeAccess = !!isAdminOrMaster || isFreeTrial;
 
     // Get user's wallet balance
     const { data: wallet, error: walletError } = await supabase
