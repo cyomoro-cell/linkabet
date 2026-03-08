@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@/lib/currency';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 export function BetSlip() {
   const { 
@@ -18,6 +19,7 @@ export function BetSlip() {
   const { user, wallet, isAuthenticated, refreshWallet } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { settings } = useSystemSettings();
   const [isPlacing, setIsPlacing] = useState(false);
 
   const totalOdds = getTotalOdds();
@@ -31,8 +33,23 @@ export function BetSlip() {
       return;
     }
 
+    if (!settings.betting_enabled) {
+      toast({ title: 'Betting is currently disabled', variant: 'destructive' });
+      return;
+    }
+
     if (stake <= 0 || selections.length === 0) {
       toast({ title: 'Invalid bet', description: 'Add selections and enter a stake.', variant: 'destructive' });
+      return;
+    }
+
+    if (stake < settings.min_bet_amount) {
+      toast({ title: 'Stake too low', description: `Minimum bet is ${formatCurrency(settings.min_bet_amount, currency)}`, variant: 'destructive' });
+      return;
+    }
+
+    if (stake > settings.max_bet_amount) {
+      toast({ title: 'Stake too high', description: `Maximum bet is ${formatCurrency(settings.max_bet_amount, currency)}`, variant: 'destructive' });
       return;
     }
 
@@ -43,7 +60,6 @@ export function BetSlip() {
 
     setIsPlacing(true);
     try {
-      // Create bet record for each selection (or accumulator)
       const firstSelection = selections[0];
       const { error: betError } = await db.from('bets').insert({
         user_id: user!.id,
@@ -68,19 +84,18 @@ export function BetSlip() {
 
       if (betError) throw betError;
 
-      // Create transaction
       const { error: txError } = await db.from('transactions').insert({
         user_id: user!.id,
         type: 'bet',
         amount: stake,
         fee: 0,
         net_amount: stake,
+        status: 'approved',
         description: `Bet on ${firstSelection.match.homeTeam.name} vs ${firstSelection.match.awayTeam.name}`,
       });
 
       if (txError) throw txError;
 
-      // Deduct balance
       const newBalance = balance - stake;
       const { error: walletError } = await db
         .from('wallets')
@@ -175,13 +190,20 @@ export function BetSlip() {
               value={stake}
               onChange={(e) => setStake(Number(e.target.value))}
               className="pl-7"
-              min={1}
+              min={settings.min_bet_amount}
+              max={settings.max_bet_amount}
             />
           </div>
           {isAuthenticated && (
-            <p className="text-xs text-muted-foreground">Balance: {formatCurrency(balance, currency)}</p>
+            <p className="text-xs text-muted-foreground">
+              Balance: {formatCurrency(balance, currency)} • Min: {formatCurrency(settings.min_bet_amount, currency)} • Max: {formatCurrency(settings.max_bet_amount, currency)}
+            </p>
           )}
         </div>
+
+        {!settings.betting_enabled && (
+          <p className="text-xs text-destructive text-center">Betting is currently disabled</p>
+        )}
 
         <div className="flex items-center justify-between py-3 px-4 rounded-lg bg-primary/10 border border-primary/20">
           <span className="font-medium">Potential Win</span>
@@ -193,7 +215,7 @@ export function BetSlip() {
           size="lg" 
           className="w-full" 
           onClick={handlePlaceBet}
-          disabled={isPlacing}
+          disabled={isPlacing || !settings.betting_enabled}
         >
           {isPlacing ? (
             <Loader2 className="h-5 w-5 animate-spin" />
