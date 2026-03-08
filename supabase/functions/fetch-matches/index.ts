@@ -42,6 +42,118 @@ function shiftOdds(odds: { home: number; draw?: number; away: number }) {
   };
 }
 
+// ─── SportMonks Football API v3 (Live Scores + Real Odds) ───
+async function fetchSportMonks(): Promise<Match[]> {
+  const apiToken = Deno.env.get("SPORTMONKS_API_KEY");
+  if (!apiToken) {
+    console.warn("SPORTMONKS_API_KEY not set, skipping SportMonks");
+    return [];
+  }
+
+  const matches: Match[] = [];
+
+  try {
+    // Fetch livescores with scores, participants, odds includes
+    const liveRes = await fetch(
+      `https://api.sportmonks.com/v3/football/livescores/inplay?api_token=${apiToken}&include=participants;scores;odds`
+    );
+    const liveData = await liveRes.json();
+
+    if (liveData.data && Array.isArray(liveData.data)) {
+      for (const fixture of liveData.data) {
+        const parsed = parseSportMonksFixture(fixture, true);
+        if (parsed) matches.push(parsed);
+      }
+    }
+    console.log(`SportMonks live: ${matches.length} matches`);
+  } catch (e) {
+    console.error("SportMonks livescores error:", e);
+  }
+
+  try {
+    // Fetch today's fixtures (scheduled/upcoming) with odds
+    const today = new Date().toISOString().split("T")[0];
+    const fixturesRes = await fetch(
+      `https://api.sportmonks.com/v3/football/fixtures/date/${today}?api_token=${apiToken}&include=participants;scores;odds;league&per_page=50`
+    );
+    const fixturesData = await fixturesRes.json();
+
+    if (fixturesData.data && Array.isArray(fixturesData.data)) {
+      const existingIds = new Set(matches.map(m => m.id));
+      for (const fixture of fixturesData.data) {
+        const parsed = parseSportMonksFixture(fixture, false);
+        if (parsed && !existingIds.has(parsed.id)) matches.push(parsed);
+      }
+    }
+    console.log(`SportMonks total (live+scheduled): ${matches.length} matches`);
+  } catch (e) {
+    console.error("SportMonks fixtures error:", e);
+  }
+
+  return matches;
+}
+
+function parseSportMonksFixture(fixture: any, isLive: boolean): Match | null {
+  try {
+    const participants = fixture.participants || [];
+    const home = participants.find((p: any) => p.meta?.location === "home");
+    const away = participants.find((p: any) => p.meta?.location === "away");
+    if (!home || !away) return null;
+
+    // Extract scores
+    const scores = fixture.scores || [];
+    const homeScore = scores.find((s: any) => s.description === "CURRENT" && s.score?.participant === "home");
+    const awayScore = scores.find((s: any) => s.description === "CURRENT" && s.score?.participant === "away");
+
+    // Extract odds (market_id 1 = Match Winner: Home/Draw/Away)
+    let odds = generateOdds("football");
+    const oddsData = fixture.odds || [];
+    const matchWinnerOdds = oddsData.filter((o: any) => o.market_id === 1);
+    if (matchWinnerOdds.length >= 2) {
+      const homeOdd = matchWinnerOdds.find((o: any) => o.label === "Home" || o.name === "Home");
+      const drawOdd = matchWinnerOdds.find((o: any) => o.label === "Draw" || o.name === "Draw");
+      const awayOdd = matchWinnerOdds.find((o: any) => o.label === "Away" || o.name === "Away");
+      odds = {
+        home: homeOdd ? parseFloat(homeOdd.value) : odds.home,
+        draw: drawOdd ? parseFloat(drawOdd.value) : odds.draw,
+        away: awayOdd ? parseFloat(awayOdd.value) : odds.away,
+      };
+    }
+
+    // Determine live state from state_id (1=NS, 2=1H, 3=HT, 4=2H, 5=FT, etc.)
+    const liveStates = [2, 3, 4, 21, 22, 23, 24, 25]; // various in-play states
+    const fixtureIsLive = isLive || liveStates.includes(fixture.state_id);
+
+    // Minute from clock or time info
+    const minute = fixture.clock?.minute ?? fixture.time?.minute ?? undefined;
+
+    const leagueName = fixture.league?.name || fixture.name?.split(" vs ")?.[0] || "Football League";
+
+    return {
+      id: `SM_${fixture.id}`,
+      sport: "football",
+      league: leagueName,
+      homeTeam: {
+        id: `sm_${home.id}`,
+        name: home.name || "Home",
+        score: homeScore?.score?.goals ?? undefined,
+      },
+      awayTeam: {
+        id: `sm_${away.id}`,
+        name: away.name || "Away",
+        score: awayScore?.score?.goals ?? undefined,
+      },
+      odds,
+      startTime: fixture.starting_at || new Date().toISOString(),
+      isLive: fixtureIsLive,
+      minute,
+    };
+  } catch (e) {
+    console.error("Error parsing SportMonks fixture:", e);
+    return null;
+  }
+}
+
 // ─── TheSportsDB (Soccer, Basketball, Tennis, Cricket, Rugby, etc.) ───
 async function fetchTheSportsDB(): Promise<Match[]> {
   const matches: Match[] = [];
@@ -363,7 +475,8 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Fetch from all APIs in parallel
-    const [sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches] = await Promise.all([
+    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches] = await Promise.all([
+      fetchSportMonks(),
       fetchTheSportsDB(),
       fetchNBA(),
       fetchMLB(),
@@ -373,6 +486,7 @@ serve(async (req) => {
     ]);
 
     const allMatches: Match[] = [
+      ...sportMonksMatches,
       ...sportsDbMatches,
       ...nbaMatches,
       ...mlbMatches,
@@ -380,7 +494,7 @@ serve(async (req) => {
       ...espnSoccerMatches,
       ...espnMmaMatches,
     ];
-    console.log(`Fetched ${allMatches.length} matches from APIs (TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length})`);
+    console.log(`Fetched ${allMatches.length} matches from APIs (SportMonks: ${sportMonksMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length})`);
 
     // Check existing DB matches to update live odds
     const { data: existingMatches } = await supabase
