@@ -475,7 +475,8 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Fetch from all APIs in parallel
-    const [sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches] = await Promise.all([
+    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches] = await Promise.all([
+      fetchSportMonks(),
       fetchTheSportsDB(),
       fetchNBA(),
       fetchMLB(),
@@ -485,6 +486,7 @@ serve(async (req) => {
     ]);
 
     const allMatches: Match[] = [
+      ...sportMonksMatches,
       ...sportsDbMatches,
       ...nbaMatches,
       ...mlbMatches,
@@ -492,7 +494,7 @@ serve(async (req) => {
       ...espnSoccerMatches,
       ...espnMmaMatches,
     ];
-    console.log(`Fetched ${allMatches.length} matches from APIs (TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length})`);
+    console.log(`Fetched ${allMatches.length} matches from APIs (SportMonks: ${sportMonksMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length})`);
 
     // Check existing DB matches to update live odds
     const { data: existingMatches } = await supabase
