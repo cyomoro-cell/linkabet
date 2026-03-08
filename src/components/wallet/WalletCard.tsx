@@ -8,24 +8,30 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/supabase';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
-
-const FEE_PERCENTAGE = 0.05; // 5% fee
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 export function WalletCard() {
   const { wallet, user, refreshWallet } = useAuth();
   const { toast } = useToast();
+  const { settings } = useSystemSettings();
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const currency = wallet?.currency || 'USD';
-  const sym = getCurrencySymbol(currency);
   const balance = wallet?.balance ? Number(wallet.balance) : 0;
+  const depositFee = settings.deposit_fee_percentage / 100;
+  const withdrawalFee = settings.withdrawal_fee_percentage / 100;
 
   const handleDeposit = async () => {
     if (!user || !amount) return;
-    
+
+    if (!settings.deposits_enabled) {
+      toast({ title: 'Deposits are currently disabled', variant: 'destructive' });
+      return;
+    }
+
     const depositAmount = parseFloat(amount);
     if (isNaN(depositAmount) || depositAmount <= 0) {
       toast({ title: 'Invalid amount', variant: 'destructive' });
@@ -34,7 +40,7 @@ export function WalletCard() {
 
     setIsLoading(true);
     try {
-      const fee = depositAmount * FEE_PERCENTAGE;
+      const fee = depositAmount * depositFee;
       const netAmount = depositAmount - fee;
 
       const { error: txError } = await db
@@ -45,7 +51,8 @@ export function WalletCard() {
           amount: depositAmount,
           fee: fee,
           net_amount: netAmount,
-          description: `Deposit of ${formatCurrency(depositAmount, currency)} (5% fee: ${formatCurrency(fee, currency)})`,
+          status: 'approved',
+          description: `Deposit of ${formatCurrency(depositAmount, currency)} (${settings.deposit_fee_percentage}% fee: ${formatCurrency(fee, currency)})`,
         });
 
       if (txError) throw txError;
@@ -63,7 +70,7 @@ export function WalletCard() {
       setAmount('');
       toast({
         title: 'Deposit successful!',
-        description: `${formatCurrency(netAmount, currency)} added to your wallet (after 5% fee)`,
+        description: `${formatCurrency(netAmount, currency)} added to your wallet (after ${settings.deposit_fee_percentage}% fee)`,
       });
     } catch (error: any) {
       toast({ title: 'Deposit failed', description: error.message, variant: 'destructive' });
@@ -74,7 +81,12 @@ export function WalletCard() {
 
   const handleWithdraw = async () => {
     if (!user || !amount) return;
-    
+
+    if (!settings.withdrawals_enabled) {
+      toast({ title: 'Withdrawals are currently disabled', variant: 'destructive' });
+      return;
+    }
+
     const withdrawAmount = parseFloat(amount);
     if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
       toast({ title: 'Invalid amount', variant: 'destructive' });
@@ -88,9 +100,10 @@ export function WalletCard() {
 
     setIsLoading(true);
     try {
-      const fee = withdrawAmount * FEE_PERCENTAGE;
+      const fee = withdrawAmount * withdrawalFee;
       const netAmount = withdrawAmount - fee;
 
+      // Create pending withdrawal transaction (admin must approve)
       const { error: txError } = await db
         .from('transactions')
         .insert({
@@ -99,11 +112,13 @@ export function WalletCard() {
           amount: withdrawAmount,
           fee: fee,
           net_amount: netAmount,
-          description: `Withdrawal of ${formatCurrency(withdrawAmount, currency)} (5% fee: ${formatCurrency(fee, currency)})`,
+          status: 'pending',
+          description: `Withdrawal of ${formatCurrency(withdrawAmount, currency)} (${settings.withdrawal_fee_percentage}% fee: ${formatCurrency(fee, currency)})`,
         });
 
       if (txError) throw txError;
 
+      // Deduct from wallet immediately (hold funds)
       const newBalance = balance - withdrawAmount;
       const { error: walletError } = await db
         .from('wallets')
@@ -116,8 +131,8 @@ export function WalletCard() {
       setWithdrawOpen(false);
       setAmount('');
       toast({
-        title: 'Withdrawal successful!',
-        description: `${formatCurrency(netAmount, currency)} will be sent (after 5% fee)`,
+        title: 'Withdrawal requested!',
+        description: `${formatCurrency(netAmount, currency)} pending admin approval (after ${settings.withdrawal_fee_percentage}% fee)`,
       });
     } catch (error: any) {
       toast({ title: 'Withdrawal failed', description: error.message, variant: 'destructive' });
@@ -141,7 +156,7 @@ export function WalletCard() {
       <div className="grid grid-cols-2 gap-3">
         <Dialog open={depositOpen} onOpenChange={setDepositOpen}>
           <DialogTrigger asChild>
-            <Button variant="hero" className="w-full">
+            <Button variant="hero" className="w-full" disabled={!settings.deposits_enabled}>
               <ArrowDownLeft className="h-4 w-4" />
               Deposit
             </Button>
@@ -168,12 +183,12 @@ export function WalletCard() {
                     <span>{formatCurrency(parseFloat(amount), currency)}</span>
                   </div>
                   <div className="flex justify-between text-destructive">
-                    <span>Fee (5%)</span>
-                    <span>-{formatCurrency(parseFloat(amount) * 0.05, currency)}</span>
+                    <span>Fee ({settings.deposit_fee_percentage}%)</span>
+                    <span>-{formatCurrency(parseFloat(amount) * depositFee, currency)}</span>
                   </div>
                   <div className="flex justify-between font-bold border-t border-border pt-1">
                     <span>You receive</span>
-                    <span className="text-primary">{formatCurrency(parseFloat(amount) * 0.95, currency)}</span>
+                    <span className="text-primary">{formatCurrency(parseFloat(amount) * (1 - depositFee), currency)}</span>
                   </div>
                 </div>
               )}
@@ -186,7 +201,7 @@ export function WalletCard() {
 
         <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" disabled={!settings.withdrawals_enabled}>
               <ArrowUpRight className="h-4 w-4" />
               Withdraw
             </Button>
@@ -217,17 +232,18 @@ export function WalletCard() {
                     <span>{formatCurrency(parseFloat(amount), currency)}</span>
                   </div>
                   <div className="flex justify-between text-destructive">
-                    <span>Fee (5%)</span>
-                    <span>-{formatCurrency(parseFloat(amount) * 0.05, currency)}</span>
+                    <span>Fee ({settings.withdrawal_fee_percentage}%)</span>
+                    <span>-{formatCurrency(parseFloat(amount) * withdrawalFee, currency)}</span>
                   </div>
                   <div className="flex justify-between font-bold border-t border-border pt-1">
                     <span>You receive</span>
-                    <span className="text-primary">{formatCurrency(parseFloat(amount) * 0.95, currency)}</span>
+                    <span className="text-primary">{formatCurrency(parseFloat(amount) * (1 - withdrawalFee), currency)}</span>
                   </div>
                 </div>
               )}
+              <p className="text-xs text-muted-foreground">Withdrawals require admin approval.</p>
               <Button onClick={handleWithdraw} variant="hero" className="w-full" disabled={isLoading}>
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm Withdrawal'}
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Request Withdrawal'}
               </Button>
             </div>
           </DialogContent>
