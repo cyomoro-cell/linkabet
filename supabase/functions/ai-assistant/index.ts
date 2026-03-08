@@ -28,23 +28,27 @@ serve(async (req) => {
     // Create Supabase client with service role
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
+    // Check if user is admin or master (free AI access)
+    const { data: isAdminOrMaster } = await supabase.rpc("is_admin_or_master", { _user_id: userId });
+
     // Check if user is within free trial (10 days from account creation)
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("created_at")
-      .eq("id", userId)
-      .single();
-
-    const FREE_TRIAL_DAYS = 10;
     let isFreeTrial = false;
+    if (!isAdminOrMaster) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("created_at")
+        .eq("id", userId)
+        .single();
 
-    if (profile?.created_at) {
-      const createdAt = new Date(profile.created_at);
-      const now = new Date();
-      const diffMs = now.getTime() - createdAt.getTime();
-      const diffDays = diffMs / (1000 * 60 * 60 * 24);
-      isFreeTrial = diffDays <= FREE_TRIAL_DAYS;
+      const FREE_TRIAL_DAYS = 10;
+      if (profile?.created_at) {
+        const createdAt = new Date(profile.created_at);
+        const diffDays = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+        isFreeTrial = diffDays <= FREE_TRIAL_DAYS;
+      }
     }
+
+    const isFreeAccess = !!isAdminOrMaster || isFreeTrial;
 
     // Get user's wallet balance
     const { data: wallet, error: walletError } = await supabase
@@ -63,8 +67,8 @@ serve(async (req) => {
 
     const currentBalance = parseFloat(wallet.balance);
     
-    // Only check balance if not in free trial
-    if (!isFreeTrial && currentBalance < BASE_FEE) {
+    // Only check balance if not free access
+    if (!isFreeAccess && currentBalance < BASE_FEE) {
       return new Response(JSON.stringify({ error: "Insufficient balance" }), {
         status: 402,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -114,24 +118,23 @@ Be concise, helpful, and always encourage responsible betting. Never guarantee w
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
-    // Deduct fee from wallet (skip if free trial)
-    const fee = isFreeTrial ? 0 : BASE_FEE;
+    // Deduct fee from wallet (skip if free access)
+    const fee = isFreeAccess ? 0 : BASE_FEE;
     
-    if (!isFreeTrial) {
+    if (!isFreeAccess) {
       const newBalance = currentBalance - fee;
       await supabase
         .from("wallets")
         .update({ balance: newBalance, updated_at: new Date().toISOString() })
         .eq("user_id", userId);
 
-      // Create transaction record
       await supabase.from("transactions").insert({
         user_id: userId,
         type: "ai_fee",
         amount: fee,
         fee: 0,
         net_amount: fee,
-        description: "AI Assistant usage fee (10%)",
+        description: "AI Assistant usage fee",
       });
     }
 
