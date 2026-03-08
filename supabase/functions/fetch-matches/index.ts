@@ -635,9 +635,9 @@ serve(async (req) => {
     }
 
     // ─── Auto-remove ended matches ───
-    // Remove non-live matches whose start_time is more than 3 hours ago
+    // Remove non-live matches whose start_time is more than 3 minutes ago
     // and live matches whose minute exceeds 120 (full time + extra time buffer)
-    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     
     // Delete old non-live matches (finished/past)
     const { data: deletedPast, error: delPastErr } = await supabase
