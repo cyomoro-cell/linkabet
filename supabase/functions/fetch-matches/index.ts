@@ -477,6 +477,133 @@ async function fetchESPNMMA(): Promise<Match[]> {
   }
 }
 
+// ─── RapidAPI Football (API-Football v3) ───
+async function fetchRapidAPIFootball(): Promise<Match[]> {
+  const apiKey = Deno.env.get("RAPIDAPI_KEY");
+  if (!apiKey) {
+    console.warn("RAPIDAPI_KEY not set, skipping RapidAPI Football");
+    return [];
+  }
+
+  const matches: Match[] = [];
+  const headers = {
+    "x-rapidapi-key": apiKey,
+    "x-rapidapi-host": "api-football-v1.p.rapidapi.com",
+  };
+
+  try {
+    // Fetch live matches
+    const liveRes = await fetch(
+      "https://api-football-v1.p.rapidapi.com/v3/fixtures?live=all",
+      { headers }
+    );
+    const liveData = await liveRes.json();
+
+    if (liveData.response && Array.isArray(liveData.response)) {
+      for (const fixture of liveData.response) {
+        const parsed = parseRapidAPIFixture(fixture, true);
+        if (parsed) matches.push(parsed);
+      }
+    }
+    console.log(`RapidAPI Football live: ${matches.length} matches`);
+  } catch (e) {
+    console.error("RapidAPI Football live error:", e);
+  }
+
+  try {
+    // Fetch today's fixtures
+    const today = new Date().toISOString().split("T")[0];
+    const schedRes = await fetch(
+      `https://api-football-v1.p.rapidapi.com/v3/fixtures?date=${today}`,
+      { headers }
+    );
+    const schedData = await schedRes.json();
+
+    if (schedData.response && Array.isArray(schedData.response)) {
+      const existingIds = new Set(matches.map(m => m.id));
+      for (const fixture of schedData.response.slice(0, 30)) {
+        const parsed = parseRapidAPIFixture(fixture, false);
+        if (parsed && !existingIds.has(parsed.id)) matches.push(parsed);
+      }
+    }
+    console.log(`RapidAPI Football total: ${matches.length} matches`);
+  } catch (e) {
+    console.error("RapidAPI Football scheduled error:", e);
+  }
+
+  // Fetch odds for today's fixtures
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const oddsRes = await fetch(
+      `https://api-football-v1.p.rapidapi.com/v3/odds?date=${today}&bookmaker=8`,
+      { headers }
+    );
+    const oddsData = await oddsRes.json();
+
+    if (oddsData.response && Array.isArray(oddsData.response)) {
+      for (const entry of oddsData.response) {
+        const fixtureId = `RAPI_${entry.fixture?.id}`;
+        const match = matches.find(m => m.id === fixtureId);
+        if (!match) continue;
+
+        const matchWinner = entry.bookmakers?.[0]?.bets?.find((b: any) => b.id === 1);
+        if (matchWinner?.values) {
+          const homeOdd = matchWinner.values.find((v: any) => v.value === "Home");
+          const drawOdd = matchWinner.values.find((v: any) => v.value === "Draw");
+          const awayOdd = matchWinner.values.find((v: any) => v.value === "Away");
+          if (homeOdd && awayOdd) {
+            match.odds = {
+              home: parseFloat(homeOdd.odd),
+              draw: drawOdd ? parseFloat(drawOdd.odd) : match.odds.draw,
+              away: parseFloat(awayOdd.odd),
+            };
+          }
+        }
+      }
+    }
+    console.log("RapidAPI odds overlay applied");
+  } catch (e) {
+    console.error("RapidAPI odds error:", e);
+  }
+
+  return matches;
+}
+
+function parseRapidAPIFixture(fixture: any, isLive: boolean): Match | null {
+  try {
+    const teams = fixture.teams;
+    const goals = fixture.goals;
+    const status = fixture.fixture?.status;
+    if (!teams?.home || !teams?.away) return null;
+
+    const liveStatuses = ["1H", "2H", "HT", "ET", "P", "BT", "LIVE"];
+    const fixtureIsLive = isLive || liveStatuses.includes(status?.short || "");
+
+    return {
+      id: `RAPI_${fixture.fixture?.id}`,
+      sport: "football",
+      league: fixture.league?.name || "Football",
+      homeTeam: {
+        id: `rapi_${teams.home.id}`,
+        name: teams.home.name || "Home",
+        score: goals?.home ?? undefined,
+      },
+      awayTeam: {
+        id: `rapi_${teams.away.id}`,
+        name: teams.away.name || "Away",
+        score: goals?.away ?? undefined,
+      },
+      odds: generateOdds("football"),
+      startTime: fixture.fixture?.date || new Date().toISOString(),
+      isLive: fixtureIsLive,
+      minute: status?.elapsed ?? undefined,
+    };
+  } catch (e) {
+    console.error("Error parsing RapidAPI fixture:", e);
+    return null;
+  }
+}
+
 // ─── Mock fallback ───
 function generateMockMatches(count: number): Match[] {
   const sports = [
@@ -540,7 +667,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Fetch from all APIs in parallel (including real odds)
-    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches, realOddsMap] = await Promise.all([
+    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches, rapidApiMatches, realOddsMap] = await Promise.all([
       fetchSportMonks(),
       fetchTheSportsDB(),
       fetchNBA(),
@@ -548,11 +675,13 @@ serve(async (req) => {
       fetchNHL(),
       fetchESPNSoccer(),
       fetchESPNMMA(),
+      fetchRapidAPIFootball(),
       fetchOddsAPI(),
     ]);
 
     const allMatches: Match[] = [
       ...sportMonksMatches,
+      ...rapidApiMatches,
       ...sportsDbMatches,
       ...nbaMatches,
       ...mlbMatches,
@@ -572,7 +701,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Fetched ${allMatches.length} matches (SportMonks: ${sportMonksMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length}). Real odds applied to ${oddsOverlayCount} matches.`);
+    console.log(`Fetched ${allMatches.length} matches (SportMonks: ${sportMonksMatches.length}, RapidAPI: ${rapidApiMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length}). Real odds applied to ${oddsOverlayCount} matches.`);
 
     // Check existing DB matches to update live odds
     const { data: existingMatches } = await supabase
