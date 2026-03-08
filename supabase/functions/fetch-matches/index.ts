@@ -539,8 +539,8 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Fetch from all APIs in parallel
-    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches] = await Promise.all([
+    // Fetch from all APIs in parallel (including real odds)
+    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches, realOddsMap] = await Promise.all([
       fetchSportMonks(),
       fetchTheSportsDB(),
       fetchNBA(),
@@ -548,6 +548,7 @@ serve(async (req) => {
       fetchNHL(),
       fetchESPNSoccer(),
       fetchESPNMMA(),
+      fetchOddsAPI(),
     ]);
 
     const allMatches: Match[] = [
@@ -559,7 +560,19 @@ serve(async (req) => {
       ...espnSoccerMatches,
       ...espnMmaMatches,
     ];
-    console.log(`Fetched ${allMatches.length} matches from APIs (SportMonks: ${sportMonksMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length})`);
+
+    // Overlay real odds from The Odds API onto matches
+    let oddsOverlayCount = 0;
+    for (const match of allMatches) {
+      const key = `${match.homeTeam.name.toLowerCase().trim()}|${match.awayTeam.name.toLowerCase().trim()}`;
+      const realOdds = realOddsMap.get(key);
+      if (realOdds) {
+        match.odds = realOdds;
+        oddsOverlayCount++;
+      }
+    }
+
+    console.log(`Fetched ${allMatches.length} matches (SportMonks: ${sportMonksMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length}). Real odds applied to ${oddsOverlayCount} matches.`);
 
     // Check existing DB matches to update live odds
     const { data: existingMatches } = await supabase
