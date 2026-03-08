@@ -154,6 +154,71 @@ function parseSportMonksFixture(fixture: any, isLive: boolean): Match | null {
   }
 }
 
+// ─── The Odds API (Real bookmaker odds overlay) ───
+interface OddsAPIEvent {
+  id: string;
+  sport_key: string;
+  home_team: string;
+  away_team: string;
+  commence_time: string;
+  bookmakers: Array<{
+    markets: Array<{
+      key: string;
+      outcomes: Array<{ name: string; price: number }>;
+    }>;
+  }>;
+}
+
+async function fetchOddsAPI(): Promise<Map<string, { home: number; draw?: number; away: number }>> {
+  const apiKey = Deno.env.get("ODDS_API_KEY");
+  if (!apiKey) {
+    console.warn("ODDS_API_KEY not set, skipping The Odds API");
+    return new Map();
+  }
+
+  const oddsMap = new Map<string, { home: number; draw?: number; away: number }>();
+  const sports = ["soccer", "basketball", "icehockey", "baseball", "mma_mixed_martial_arts", "americanfootball", "rugbyleague", "tennis"];
+
+  for (const sport of sports) {
+    try {
+      const res = await fetch(
+        `https://api.the-odds-api.com/v4/sports/${sport === "soccer" ? "soccer_epl" : sport === "basketball" ? "basketball_nba" : sport === "icehockey" ? "icehockey_nhl" : sport === "baseball" ? "baseball_mlb" : sport}/odds/?apiKey=${apiKey}&regions=us,eu&markets=h2h&oddsFormat=decimal`
+      );
+      if (!res.ok) {
+        console.warn(`Odds API ${sport} returned ${res.status}`);
+        continue;
+      }
+      const events: OddsAPIEvent[] = await res.json();
+
+      for (const event of events) {
+        const bookmaker = event.bookmakers?.[0];
+        const h2h = bookmaker?.markets?.find((m: any) => m.key === "h2h");
+        if (!h2h) continue;
+
+        const homeOutcome = h2h.outcomes.find((o: any) => o.name === event.home_team);
+        const awayOutcome = h2h.outcomes.find((o: any) => o.name === event.away_team);
+        const drawOutcome = h2h.outcomes.find((o: any) => o.name === "Draw");
+
+        if (homeOutcome && awayOutcome) {
+          // Key by normalized team names for matching
+          const key = `${event.home_team.toLowerCase().trim()}|${event.away_team.toLowerCase().trim()}`;
+          oddsMap.set(key, {
+            home: homeOutcome.price,
+            away: awayOutcome.price,
+            ...(drawOutcome ? { draw: drawOutcome.price } : {}),
+          });
+        }
+      }
+      console.log(`Odds API ${sport}: ${events.length} events`);
+    } catch (e) {
+      console.error(`Odds API ${sport} error:`, e);
+    }
+  }
+
+  console.log(`Odds API total: ${oddsMap.size} odds entries`);
+  return oddsMap;
+}
+
 // ─── TheSportsDB (Soccer, Basketball, Tennis, Cricket, Rugby, etc.) ───
 async function fetchTheSportsDB(): Promise<Match[]> {
   const matches: Match[] = [];
@@ -474,8 +539,8 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Fetch from all APIs in parallel
-    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches] = await Promise.all([
+    // Fetch from all APIs in parallel (including real odds)
+    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches, realOddsMap] = await Promise.all([
       fetchSportMonks(),
       fetchTheSportsDB(),
       fetchNBA(),
@@ -483,6 +548,7 @@ serve(async (req) => {
       fetchNHL(),
       fetchESPNSoccer(),
       fetchESPNMMA(),
+      fetchOddsAPI(),
     ]);
 
     const allMatches: Match[] = [
@@ -494,7 +560,19 @@ serve(async (req) => {
       ...espnSoccerMatches,
       ...espnMmaMatches,
     ];
-    console.log(`Fetched ${allMatches.length} matches from APIs (SportMonks: ${sportMonksMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length})`);
+
+    // Overlay real odds from The Odds API onto matches
+    let oddsOverlayCount = 0;
+    for (const match of allMatches) {
+      const key = `${match.homeTeam.name.toLowerCase().trim()}|${match.awayTeam.name.toLowerCase().trim()}`;
+      const realOdds = realOddsMap.get(key);
+      if (realOdds) {
+        match.odds = realOdds;
+        oddsOverlayCount++;
+      }
+    }
+
+    console.log(`Fetched ${allMatches.length} matches (SportMonks: ${sportMonksMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length}). Real odds applied to ${oddsOverlayCount} matches.`);
 
     // Check existing DB matches to update live odds
     const { data: existingMatches } = await supabase
