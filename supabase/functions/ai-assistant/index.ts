@@ -67,8 +67,8 @@ serve(async (req) => {
 
     const currentBalance = parseFloat(wallet.balance);
     
-    // Only check balance if not in free trial
-    if (!isFreeTrial && currentBalance < BASE_FEE) {
+    // Only check balance if not free access
+    if (!isFreeAccess && currentBalance < BASE_FEE) {
       return new Response(JSON.stringify({ error: "Insufficient balance" }), {
         status: 402,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
