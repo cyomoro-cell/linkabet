@@ -667,7 +667,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Fetch from all APIs in parallel (including real odds)
-    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches, realOddsMap] = await Promise.all([
+    const [sportMonksMatches, sportsDbMatches, nbaMatches, mlbMatches, nhlMatches, espnSoccerMatches, espnMmaMatches, rapidApiMatches, realOddsMap] = await Promise.all([
       fetchSportMonks(),
       fetchTheSportsDB(),
       fetchNBA(),
@@ -675,11 +675,13 @@ serve(async (req) => {
       fetchNHL(),
       fetchESPNSoccer(),
       fetchESPNMMA(),
+      fetchRapidAPIFootball(),
       fetchOddsAPI(),
     ]);
 
     const allMatches: Match[] = [
       ...sportMonksMatches,
+      ...rapidApiMatches,
       ...sportsDbMatches,
       ...nbaMatches,
       ...mlbMatches,
