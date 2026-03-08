@@ -118,24 +118,23 @@ Be concise, helpful, and always encourage responsible betting. Never guarantee w
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
-    // Deduct fee from wallet (skip if free trial)
-    const fee = isFreeTrial ? 0 : BASE_FEE;
+    // Deduct fee from wallet (skip if free access)
+    const fee = isFreeAccess ? 0 : BASE_FEE;
     
-    if (!isFreeTrial) {
+    if (!isFreeAccess) {
       const newBalance = currentBalance - fee;
       await supabase
         .from("wallets")
         .update({ balance: newBalance, updated_at: new Date().toISOString() })
         .eq("user_id", userId);
 
-      // Create transaction record
       await supabase.from("transactions").insert({
         user_id: userId,
         type: "ai_fee",
         amount: fee,
         fee: 0,
         net_amount: fee,
-        description: "AI Assistant usage fee (10%)",
+        description: "AI Assistant usage fee",
       });
     }
 
