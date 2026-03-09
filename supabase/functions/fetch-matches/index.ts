@@ -679,9 +679,48 @@ serve(async (req) => {
       fetchOddsAPI(),
     ]);
 
+    // ─── Merge SportMonks + RapidAPI (deduplicate by team name matching) ───
+    // SportMonks is primary for scores; RapidAPI enriches odds and fills gaps
+    const mergedFootball: Match[] = [...sportMonksMatches];
+    const smTeamKeys = new Set(
+      sportMonksMatches.map(m => `${m.homeTeam.name.toLowerCase().trim()}|${m.awayTeam.name.toLowerCase().trim()}`)
+    );
+
+    let rapiEnriched = 0;
+    for (const rapiMatch of rapidApiMatches) {
+      const key = `${rapiMatch.homeTeam.name.toLowerCase().trim()}|${rapiMatch.awayTeam.name.toLowerCase().trim()}`;
+      // Check if SportMonks already has this match
+      const smMatch = mergedFootball.find(
+        m => `${m.homeTeam.name.toLowerCase().trim()}|${m.awayTeam.name.toLowerCase().trim()}` === key
+      );
+
+      if (smMatch) {
+        // Enrich: prefer RapidAPI odds if SportMonks odds look generated (no real source)
+        const smOddsLookGenerated = smMatch.odds.home >= 1.5 && smMatch.odds.home <= 3.5;
+        const rapiHasRealOdds = rapiMatch.odds.home !== undefined;
+        if (rapiHasRealOdds && smOddsLookGenerated) {
+          smMatch.odds = rapiMatch.odds;
+          rapiEnriched++;
+        }
+        // Enrich scores from RapidAPI if SportMonks is missing them
+        if (smMatch.homeTeam.score === undefined && rapiMatch.homeTeam.score !== undefined) {
+          smMatch.homeTeam.score = rapiMatch.homeTeam.score;
+          smMatch.awayTeam.score = rapiMatch.awayTeam.score;
+        }
+        // Enrich minute
+        if (smMatch.minute === undefined && rapiMatch.minute !== undefined) {
+          smMatch.minute = rapiMatch.minute;
+        }
+      } else {
+        // New match not in SportMonks - add it
+        mergedFootball.push(rapiMatch);
+      }
+    }
+
+    console.log(`Merged football: ${mergedFootball.length} (SM: ${sportMonksMatches.length}, RAPI unique adds: ${mergedFootball.length - sportMonksMatches.length}, RAPI enriched: ${rapiEnriched})`);
+
     const allMatches: Match[] = [
-      ...sportMonksMatches,
-      ...rapidApiMatches,
+      ...mergedFootball,
       ...sportsDbMatches,
       ...nbaMatches,
       ...mlbMatches,
@@ -701,7 +740,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Fetched ${allMatches.length} matches (SportMonks: ${sportMonksMatches.length}, RapidAPI: ${rapidApiMatches.length}, TheSportsDB: ${sportsDbMatches.length}, NBA: ${nbaMatches.length}, MLB: ${mlbMatches.length}, NHL: ${nhlMatches.length}, ESPN Soccer: ${espnSoccerMatches.length}, ESPN MMA: ${espnMmaMatches.length}). Real odds applied to ${oddsOverlayCount} matches.`);
+    console.log(`Total: ${allMatches.length} matches. Real odds applied to ${oddsOverlayCount}.`);
 
     // Check existing DB matches to update live odds
     const { data: existingMatches } = await supabase
