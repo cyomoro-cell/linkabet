@@ -27,7 +27,7 @@ const SPORTS_CONFIG = [
   { key: "football", subdomain: "football", sportName: "football" },
   { key: "basketball", subdomain: "basketball", sportName: "basketball" },
   { key: "tennis", subdomain: "tennis", sportName: "tennis" },
-  { key: "ice-hockey", subdomain: "ice-hockey", sportName: "ice hockey" },
+  { key: "ice-hockey", subdomain: "icehockey", sportName: "ice hockey" },
   { key: "baseball", subdomain: "baseball", sportName: "baseball" },
   { key: "cricket", subdomain: "cricket", sportName: "cricket" },
   { key: "american-football", subdomain: "american-football", sportName: "american football" },
