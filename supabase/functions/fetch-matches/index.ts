@@ -160,12 +160,21 @@ async function fetchSportsAPIPro(apiKey: string): Promise<Match[]> {
       console.error(`SportsAPI ${sport.key} live error:`, e);
     }
 
-    // Fetch today's scheduled matches
-    try {
-      const todayRes = await fetch(`${baseUrl}/api/schedule/${today}?showOdds=true&timezoneName=UTC`, { headers });
-      if (todayRes.ok) {
+    // Fetch today's matches — try /api/today first, fallback to /api/schedule/{date}
+    const todayEndpoints = [
+      `${baseUrl}/api/today?showOdds=true&timezoneName=UTC`,
+      `${baseUrl}/api/schedule/${today}?showOdds=true&timezoneName=UTC`,
+    ];
+
+    for (const endpoint of todayEndpoints) {
+      try {
+        const todayRes = await fetch(endpoint, { headers });
+        if (!todayRes.ok) {
+          console.warn(`SportsAPI ${sport.key} schedule (${endpoint.includes('/today') ? 'today' : 'date'}): HTTP ${todayRes.status}`);
+          continue;
+        }
         const todayData = await todayRes.json();
-        // Schedule response may have games directly or grouped by tournament
+        // Parse games from various response formats
         let games: any[] = [];
         if (todayData.games && Array.isArray(todayData.games)) {
           games = todayData.games;
@@ -173,23 +182,37 @@ async function fetchSportsAPIPro(apiKey: string): Promise<Match[]> {
           games = todayData.events;
         } else if (Array.isArray(todayData)) {
           games = todayData;
-        }
-
-        const existingIds = new Set(matches.map(m => m.id));
-        let added = 0;
-        for (const game of games.slice(0, 30)) {
-          const parsed = parseGameToMatch(game, sport.sportName, prefix);
-          if (parsed && !existingIds.has(parsed.id)) {
-            matches.push(parsed);
-            added++;
+        } else {
+          // Try extracting from nested tournament groups
+          const keys = Object.keys(todayData);
+          for (const key of keys) {
+            const val = todayData[key];
+            if (Array.isArray(val)) {
+              for (const item of val) {
+                if (item.games) games.push(...item.games);
+                else if (item.events) games.push(...item.events);
+                else if (item.id && (item.homeCompetitor || item.homeTeam)) games.push(item);
+              }
+            }
           }
         }
-        console.log(`SportsAPI ${sport.key} schedule: +${added}`);
-      } else {
-        console.warn(`SportsAPI ${sport.key} schedule: HTTP ${todayRes.status}`);
+
+        if (games.length > 0) {
+          const existingIds = new Set(matches.map(m => m.id));
+          let added = 0;
+          for (const game of games.slice(0, 30)) {
+            const parsed = parseGameToMatch(game, sport.sportName, prefix);
+            if (parsed && !existingIds.has(parsed.id)) {
+              matches.push(parsed);
+              added++;
+            }
+          }
+          console.log(`SportsAPI ${sport.key} schedule: +${added}`);
+          break; // Got data, no need to try next endpoint
+        }
+      } catch (e) {
+        console.error(`SportsAPI ${sport.key} schedule error:`, e);
       }
-    } catch (e) {
-      console.error(`SportsAPI ${sport.key} schedule error:`, e);
     }
 
     return matches;
