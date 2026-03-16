@@ -180,6 +180,11 @@ async function fetchSportsAPIPro(apiKey: string): Promise<Match[]> {
           continue;
         }
         const todayData = await todayRes.json();
+        // Debug: log schedule response for football
+        if (sport.key === "football") {
+          console.log(`SportsAPI football schedule response keys: ${JSON.stringify(Object.keys(todayData))}`);
+          console.log(`SportsAPI football schedule sample: ${JSON.stringify(todayData).substring(0, 500)}`);
+        }
         // Parse games from various response formats
         let games: any[] = [];
         if (todayData.games && Array.isArray(todayData.games)) {
