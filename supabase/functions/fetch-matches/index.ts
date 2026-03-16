@@ -19,21 +19,27 @@ interface Match {
 }
 
 // ─── SportsAPI Pro V2 ───
-// Docs: https://docs.sportsapipro.com/api-reference/overview
-// Auth: x-api-key header
+// Auth: x-api-key header | Base: https://v2.{sport}.sportsapipro.com
+// Endpoints: /api/live (live matches), /api/today (today's schedule)
 // Response: { games: [...], lastUpdateId, ttl }
+// statusGroup: 2=Scheduled, 3=Live, 4=Ended
 
-const SPORTS_CONFIG = [
-  { key: "football", subdomain: "football", sportName: "football" },
-  { key: "basketball", subdomain: "basketball", sportName: "basketball" },
-  { key: "tennis", subdomain: "tennis", sportName: "tennis" },
-  { key: "ice-hockey", subdomain: "icehockey", sportName: "ice hockey" },
-  { key: "baseball", subdomain: "baseball", sportName: "baseball" },
-  { key: "cricket", subdomain: "cricket", sportName: "cricket" },
-  { key: "american-football", subdomain: "american-football", sportName: "american football" },
-  { key: "mma", subdomain: "mma", sportName: "mma" },
-  { key: "rugby", subdomain: "rugby", sportName: "rugby" },
-  { key: "esports", subdomain: "esports", sportName: "esports" },
+// Primary sports only to conserve API quota (100 req/day on free tier)
+// Each invocation: 2 calls per sport (live + today) = ~6-8 calls
+const PRIMARY_SPORTS = [
+  { subdomain: "football", sportName: "football", prefix: "FB" },
+  { subdomain: "basketball", sportName: "basketball", prefix: "BB" },
+  { subdomain: "tennis", sportName: "tennis", prefix: "TN" },
+];
+
+// Secondary sports rotate: one per invocation to save quota
+const SECONDARY_SPORTS = [
+  { subdomain: "cricket", sportName: "cricket", prefix: "CK" },
+  { subdomain: "mma", sportName: "mma", prefix: "MMA" },
+  { subdomain: "baseball", sportName: "baseball", prefix: "BL" },
+  { subdomain: "rugby", sportName: "rugby", prefix: "RG" },
+  { subdomain: "american-football", sportName: "american football", prefix: "AF" },
+  { subdomain: "esports", sportName: "esports", prefix: "ES" },
 ];
 
 function generateFallbackOdds(sport: string) {
@@ -56,7 +62,6 @@ function parseOdds(game: any, sportName: string): { home: number; draw?: number;
     if (!oddsData || !oddsData.options || !Array.isArray(oddsData.options)) {
       return generateFallbackOdds(sportName);
     }
-    // options array: each option has num (1=home, 2=draw, 3=away) and rate
     const options = oddsData.options;
     const homeOpt = options.find((o: any) => o.num === 1);
     const drawOpt = options.find((o: any) => o.num === 2);
@@ -69,14 +74,10 @@ function parseOdds(game: any, sportName: string): { home: number; draw?: number;
         away: parseFloat(awayOpt.rate) || generateFallbackOdds(sportName).away,
       };
     }
-    // For 2-way sports (basketball, tennis, etc.) options might be num 1 and 2
     const opt1 = options.find((o: any) => o.num === 1);
     const opt2 = options.find((o: any) => o.num === 2);
     if (opt1 && opt2) {
-      return {
-        home: parseFloat(opt1.rate) || 1.5,
-        away: parseFloat(opt2.rate) || 2.0,
-      };
+      return { home: parseFloat(opt1.rate) || 1.5, away: parseFloat(opt2.rate) || 2.0 };
     }
     return generateFallbackOdds(sportName);
   } catch {
@@ -90,14 +91,10 @@ function parseGameToMatch(game: any, sportName: string, prefix: string): Match |
     const away = game.awayCompetitor;
     if (!home || !away) return null;
 
-    // statusGroup: 2=Scheduled, 3=Live, 4=Ended
     const isLive = game.statusGroup === 3;
     const isEnded = game.statusGroup === 4;
-    
-    // Skip ended games
     if (isEnded) return null;
 
-    // Extract minute from statusText (e.g. "45'" or "HT" or "2H 60'")
     let minute: number | undefined;
     if (isLive && game.statusText) {
       const minuteMatch = game.statusText.match(/(\d+)/);
@@ -131,110 +128,84 @@ function parseGameToMatch(game: any, sportName: string, prefix: string): Match |
   }
 }
 
-async function fetchSportsAPIPro(apiKey: string): Promise<Match[]> {
-  const allMatches: Match[] = [];
-  const today = new Date().toISOString().split("T")[0];
+async function fetchSportData(
+  baseUrl: string,
+  sportName: string,
+  prefix: string,
+  apiKey: string,
+): Promise<Match[]> {
+  const headers = { "x-api-key": apiKey };
+  const matches: Match[] = [];
 
-  // Fetch live + today's matches for each sport in parallel
-  const fetchPromises = SPORTS_CONFIG.map(async (sport) => {
-    const baseUrl = `https://v2.${sport.subdomain}.sportsapipro.com`;
-    const headers = { "x-api-key": apiKey };
-    const matches: Match[] = [];
-    const prefix = sport.key.toUpperCase().replace("-", "");
-
-    // Fetch live matches
-    try {
-      const liveRes = await fetch(`${baseUrl}/api/live`, { headers });
-      if (liveRes.ok) {
-        const liveData = await liveRes.json();
-        // Debug: log response keys for first sport
-        if (sport.key === "football") {
-          console.log(`SportsAPI football live response keys: ${JSON.stringify(Object.keys(liveData))}`);
-          console.log(`SportsAPI football live sample: ${JSON.stringify(liveData).substring(0, 500)}`);
-        }
-        const games = liveData.games || liveData.events || [];
-        for (const game of games) {
-          const parsed = parseGameToMatch(game, sport.sportName, prefix);
-          if (parsed) matches.push(parsed);
-        }
-        console.log(`SportsAPI ${sport.key} live: ${matches.length}`);
-      } else {
-        const errText = await liveRes.text();
-        console.warn(`SportsAPI ${sport.key} live: HTTP ${liveRes.status} - ${errText.substring(0, 200)}`);
+  // Fetch live
+  try {
+    const res = await fetch(`${baseUrl}/api/live`, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      const games = data.games || data.events || [];
+      for (const game of games) {
+        const parsed = parseGameToMatch(game, sportName, prefix);
+        if (parsed) matches.push(parsed);
       }
-    } catch (e) {
-      console.error(`SportsAPI ${sport.key} live error:`, e);
+    } else if (res.status === 429) {
+      console.warn(`Rate limited on ${sportName} live`);
+      return matches;
     }
-
-    // Fetch today's matches — try /api/today first, fallback to /api/schedule/{date}
-    const todayEndpoints = [
-      `${baseUrl}/api/today?showOdds=true&timezoneName=UTC`,
-      `${baseUrl}/api/schedule/${today}?showOdds=true&timezoneName=UTC`,
-    ];
-
-    for (const endpoint of todayEndpoints) {
-      try {
-        const todayRes = await fetch(endpoint, { headers });
-        if (!todayRes.ok) {
-          console.warn(`SportsAPI ${sport.key} schedule (${endpoint.includes('/today') ? 'today' : 'date'}): HTTP ${todayRes.status}`);
-          continue;
-        }
-        const todayData = await todayRes.json();
-        // Debug: log schedule response for football
-        if (sport.key === "football") {
-          console.log(`SportsAPI football schedule response keys: ${JSON.stringify(Object.keys(todayData))}`);
-          console.log(`SportsAPI football schedule sample: ${JSON.stringify(todayData).substring(0, 500)}`);
-        }
-        // Parse games from various response formats
-        let games: any[] = [];
-        if (todayData.games && Array.isArray(todayData.games)) {
-          games = todayData.games;
-        } else if (todayData.events && Array.isArray(todayData.events)) {
-          games = todayData.events;
-        } else if (Array.isArray(todayData)) {
-          games = todayData;
-        } else {
-          // Try extracting from nested tournament groups
-          const keys = Object.keys(todayData);
-          for (const key of keys) {
-            const val = todayData[key];
-            if (Array.isArray(val)) {
-              for (const item of val) {
-                if (item.games) games.push(...item.games);
-                else if (item.events) games.push(...item.events);
-                else if (item.id && (item.homeCompetitor || item.homeTeam)) games.push(item);
-              }
-            }
-          }
-        }
-
-        if (games.length > 0) {
-          const existingIds = new Set(matches.map(m => m.id));
-          let added = 0;
-          for (const game of games.slice(0, 30)) {
-            const parsed = parseGameToMatch(game, sport.sportName, prefix);
-            if (parsed && !existingIds.has(parsed.id)) {
-              matches.push(parsed);
-              added++;
-            }
-          }
-          console.log(`SportsAPI ${sport.key} schedule: +${added}`);
-          break; // Got data, no need to try next endpoint
-        }
-      } catch (e) {
-        console.error(`SportsAPI ${sport.key} schedule error:`, e);
-      }
-    }
-
-    return matches;
-  });
-
-  const results = await Promise.all(fetchPromises);
-  for (const sportMatches of results) {
-    allMatches.push(...sportMatches);
+  } catch (e) {
+    console.error(`${sportName} live error:`, e);
   }
 
-  console.log(`SportsAPI Pro total: ${allMatches.length} matches across ${SPORTS_CONFIG.length} sports`);
+  // Fetch today's schedule
+  try {
+    const res = await fetch(`${baseUrl}/api/today?showOdds=true&timezoneName=UTC`, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      let games: any[] = data.games || data.events || [];
+      if (games.length === 0 && !Array.isArray(data)) {
+        // Try nested tournament groups
+        for (const key of Object.keys(data)) {
+          const val = data[key];
+          if (Array.isArray(val)) {
+            for (const item of val) {
+              if (item.games) games.push(...item.games);
+              else if (item.events) games.push(...item.events);
+              else if (item.id && item.homeCompetitor) games.push(item);
+            }
+          }
+        }
+      }
+      const existingIds = new Set(matches.map(m => m.id));
+      for (const game of games.slice(0, 30)) {
+        const parsed = parseGameToMatch(game, sportName, prefix);
+        if (parsed && !existingIds.has(parsed.id)) matches.push(parsed);
+      }
+    }
+  } catch (e) {
+    console.error(`${sportName} schedule error:`, e);
+  }
+
+  console.log(`SportsAPI ${sportName}: ${matches.length} matches`);
+  return matches;
+}
+
+async function fetchSportsAPIPro(apiKey: string): Promise<Match[]> {
+  // Determine which secondary sport to fetch this round (rotate by minute)
+  const rotationIndex = Math.floor(Date.now() / 60000) % SECONDARY_SPORTS.length;
+  const secondarySport = SECONDARY_SPORTS[rotationIndex];
+
+  const sportsToFetch = [
+    ...PRIMARY_SPORTS,
+    secondarySport,
+  ];
+
+  const results = await Promise.all(
+    sportsToFetch.map(s =>
+      fetchSportData(`https://v2.${s.subdomain}.sportsapipro.com`, s.sportName, s.prefix, apiKey)
+    )
+  );
+
+  const allMatches = results.flat();
+  console.log(`SportsAPI Pro total: ${allMatches.length} (primary: ${PRIMARY_SPORTS.length}, secondary: ${secondarySport.sportName})`);
   return allMatches;
 }
 
@@ -319,7 +290,7 @@ serve(async (req) => {
       console.warn("SPORTSAPI_PRO_KEY not set — using mock data only");
     }
 
-    // Check existing DB matches to update live odds
+    // Update live odds for DB matches not in current API response
     const { data: existingMatches } = await supabase
       .from("matches")
       .select("id, odds, is_live, minute")
@@ -382,31 +353,8 @@ serve(async (req) => {
     // Auto-remove ended matches
     const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
-    const { data: deletedPast, error: delPastErr } = await supabase
-      .from("matches")
-      .delete()
-      .eq("is_live", false)
-      .lt("start_time", threeMinutesAgo)
-      .select("id");
-
-    if (delPastErr) {
-      console.error("Error deleting past matches:", delPastErr);
-    } else if (deletedPast && deletedPast.length > 0) {
-      console.log(`Removed ${deletedPast.length} ended (past) matches`);
-    }
-
-    const { data: deletedEnded, error: delEndedErr } = await supabase
-      .from("matches")
-      .delete()
-      .eq("is_live", true)
-      .gt("minute", 120)
-      .select("id");
-
-    if (delEndedErr) {
-      console.error("Error deleting ended live matches:", delEndedErr);
-    } else if (deletedEnded && deletedEnded.length > 0) {
-      console.log(`Removed ${deletedEnded.length} ended (overtime) live matches`);
-    }
+    await supabase.from("matches").delete().eq("is_live", false).lt("start_time", threeMinutesAgo);
+    await supabase.from("matches").delete().eq("is_live", true).gt("minute", 120);
 
     return new Response(JSON.stringify({ matches: allMatches, count: allMatches.length, source: "SportsAPI Pro" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
