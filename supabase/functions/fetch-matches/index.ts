@@ -147,6 +147,11 @@ async function fetchSportsAPIPro(apiKey: string): Promise<Match[]> {
       const liveRes = await fetch(`${baseUrl}/api/live`, { headers });
       if (liveRes.ok) {
         const liveData = await liveRes.json();
+        // Debug: log response keys for first sport
+        if (sport.key === "football") {
+          console.log(`SportsAPI football live response keys: ${JSON.stringify(Object.keys(liveData))}`);
+          console.log(`SportsAPI football live sample: ${JSON.stringify(liveData).substring(0, 500)}`);
+        }
         const games = liveData.games || liveData.events || [];
         for (const game of games) {
           const parsed = parseGameToMatch(game, sport.sportName, prefix);
@@ -154,7 +159,8 @@ async function fetchSportsAPIPro(apiKey: string): Promise<Match[]> {
         }
         console.log(`SportsAPI ${sport.key} live: ${matches.length}`);
       } else {
-        console.warn(`SportsAPI ${sport.key} live: HTTP ${liveRes.status}`);
+        const errText = await liveRes.text();
+        console.warn(`SportsAPI ${sport.key} live: HTTP ${liveRes.status} - ${errText.substring(0, 200)}`);
       }
     } catch (e) {
       console.error(`SportsAPI ${sport.key} live error:`, e);
