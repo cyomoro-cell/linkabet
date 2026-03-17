@@ -11,22 +11,22 @@ import {
 
 const footerLinks = {
   sports: [
-    { label: 'Football', href: '#' },
-    { label: 'Basketball', href: '#' },
-    { label: 'Tennis', href: '#' },
-    { label: 'Esports', href: '#' },
+    { label: 'Football', href: '/matches?tab=upcoming' },
+    { label: 'Basketball', href: '/matches?tab=upcoming' },
+    { label: 'Tennis', href: '/matches?tab=upcoming' },
+    { label: 'Live Betting', href: '/live' },
   ],
   company: [
-    { label: 'About Us', href: '#' },
-    { label: 'Careers', href: '#' },
-    { label: 'Press', href: '#' },
-    { label: 'Contact', href: '#' },
+    { label: 'About Us', href: '/' },
+    { label: 'Casino', href: '/casino' },
+    { label: 'Promotions', href: '/' },
+    { label: 'Contact', href: '/' },
   ],
   support: [
-    { label: 'Help Center', href: '#' },
-    { label: 'Responsible Gaming', href: '#' },
-    { label: 'Terms of Service', href: '#' },
-    { label: 'Privacy Policy', href: '#' },
+    { label: 'Help Center', href: '/' },
+    { label: 'Responsible Gaming', href: '/' },
+    { label: 'Terms of Service', href: '/' },
+    { label: 'Privacy Policy', href: '/' },
   ],
 };
 
