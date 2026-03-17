@@ -2,6 +2,7 @@ import { Promotion } from '@/types';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { ArrowRight, Gift, Percent, Star } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface PromotionCardProps {
   promotion: Promotion;
