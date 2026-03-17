@@ -350,11 +350,9 @@ serve(async (req) => {
       console.log(`Upserted ${dbRows.length} matches into DB`);
     }
 
-    // Auto-remove ended matches
-    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-
-    await supabase.from("matches").delete().eq("is_live", false).lt("start_time", threeMinutesAgo);
-    await supabase.from("matches").delete().eq("is_live", true).gt("minute", 120);
+    // Auto-remove ended matches immediately
+    await supabase.from("matches").delete().eq("is_live", false).lt("start_time", new Date().toISOString());
+    await supabase.from("matches").delete().eq("is_live", true).gt("minute", 90);
 
     return new Response(JSON.stringify({ matches: allMatches, count: allMatches.length, source: "SportsAPI Pro" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
