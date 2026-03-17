@@ -59,6 +59,8 @@ async function fetchSportMonks(apiKey: string): Promise<Match[]> {
     const res = await fetch(todayUrl, { headers });
     if (res.ok) {
       const data = await res.json();
+      console.log(`SportMonks today raw keys: ${Object.keys(data).join(", ")}`);
+      console.log(`SportMonks today raw sample: ${JSON.stringify(data).slice(0, 500)}`);
       const fixtures = data.data || [];
       console.log(`SportMonks today: ${fixtures.length} fixtures`);
       const existingIds = new Set(matches.map(m => m.id));
