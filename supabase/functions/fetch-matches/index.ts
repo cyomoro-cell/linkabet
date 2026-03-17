@@ -175,7 +175,7 @@ function parseSportMonksFixture(fixture: any, fromLive: boolean, sport: string =
 
     return {
       id: `SM_${fixture.id}`,
-      sport: "football",
+      sport,
       league,
       homeTeam: {
         id: `SM_${home.id}`,
