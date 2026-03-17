@@ -244,7 +244,7 @@ function generateMockMatches(count: number): Match[] {
     while (awayIdx === homeIdx && sportTeams.length > 1) awayIdx = Math.floor(Math.random() * sportTeams.length);
 
     const isLive = Math.random() > 0.6;
-    const startOffset = isLive ? 0 : Math.random() * 7 * 24 * 60 * 60 * 1000;
+    const startOffset = isLive ? 0 : (15 + Math.random() * 7 * 24) * 60 * 1000; // Always in the future
 
     matches.push({
       id: `MOCK_${sport.name}_${league.replace(/\s/g, "")}_${i}`,
@@ -325,7 +325,12 @@ serve(async (req) => {
     // Deduplicate by ID
     const uniqueMap = new Map<string, Match>();
     for (const m of allMatches) uniqueMap.set(m.id, m);
-    const uniqueMatches = Array.from(uniqueMap.values());
+    const uniqueMatches = Array.from(uniqueMap.values()).filter(m => {
+      // Remove ended: non-live matches whose start time has passed, or live matches past 90 min
+      if (!m.isLive && new Date(m.startTime).getTime() < Date.now()) return false;
+      if (m.isLive && m.minute && m.minute > 90) return false;
+      return true;
+    });
 
     const dbRows = uniqueMatches.map(m => ({
       id: m.id,
@@ -350,11 +355,9 @@ serve(async (req) => {
       console.log(`Upserted ${dbRows.length} matches into DB`);
     }
 
-    // Auto-remove ended matches
-    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-
-    await supabase.from("matches").delete().eq("is_live", false).lt("start_time", threeMinutesAgo);
-    await supabase.from("matches").delete().eq("is_live", true).gt("minute", 120);
+    // Auto-remove ended matches immediately
+    await supabase.from("matches").delete().eq("is_live", false).lt("start_time", new Date().toISOString());
+    await supabase.from("matches").delete().eq("is_live", true).gt("minute", 90);
 
     return new Response(JSON.stringify({ matches: allMatches, count: allMatches.length, source: "SportsAPI Pro" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
