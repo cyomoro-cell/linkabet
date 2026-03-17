@@ -101,8 +101,6 @@ async function fetchSportMonksEndpoint(
     console.error(`SportMonks ${label} error:`, e);
   }
 }
-  return matches;
-}
 
 function getTodayDate(): string {
   const d = new Date();
