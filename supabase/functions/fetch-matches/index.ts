@@ -121,7 +121,7 @@ function getDateOffset(days: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function parseSportMonksFixture(fixture: any, fromLive: boolean): Match | null {
+function parseSportMonksFixture(fixture: any, fromLive: boolean, sport: string = "football"): Match | null {
   try {
     const participants = fixture.participants || [];
     if (participants.length < 2) return null;
