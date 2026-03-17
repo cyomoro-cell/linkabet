@@ -25,59 +25,82 @@ interface Match {
 
 async function fetchSportMonks(apiKey: string): Promise<Match[]> {
   const matches: Match[] = [];
-  const baseUrl = "https://api.sportmonks.com/v3/football";
   const headers = { "Accept": "application/json" };
 
-  // Fetch livescores (in-play matches)
-  try {
-    const liveUrl = `${baseUrl}/livescores/inplay?api_token=${apiKey}&include=participants;scores;league;state`;
-    console.log("SportMonks: fetching inplay livescores...");
-    const res = await fetch(liveUrl, { headers });
-    if (res.ok) {
-      const data = await res.json();
-      console.log(`SportMonks inplay raw keys: ${Object.keys(data).join(", ")}`);
-      console.log(`SportMonks inplay raw sample: ${JSON.stringify(data).slice(0, 500)}`);
-      const fixtures = data.data || [];
-      console.log(`SportMonks inplay: ${fixtures.length} live matches`);
-      for (const fixture of fixtures) {
-        const parsed = parseSportMonksFixture(fixture, true);
-        if (parsed) matches.push(parsed);
-      }
-    } else {
-      console.warn(`SportMonks inplay error: ${res.status} ${res.statusText}`);
-      const body = await res.text();
-      console.warn(`SportMonks inplay body: ${body.slice(0, 300)}`);
-    }
-  } catch (e) {
-    console.error("SportMonks inplay error:", e);
-  }
+  // Try football livescores (all - includes 15min before/after)
+  await fetchSportMonksEndpoint(
+    `https://api.sportmonks.com/v3/football/livescores?api_token=${apiKey}&include=participants;scores;league;state`,
+    "football livescores", matches, headers, "football", true
+  );
 
-  // Fetch today's fixtures (upcoming)
-  try {
-    const todayUrl = `${baseUrl}/fixtures/date/${getTodayDate()}?api_token=${apiKey}&include=participants;scores;league;state;odds`;
-    console.log("SportMonks: fetching today's fixtures...");
-    const res = await fetch(todayUrl, { headers });
-    if (res.ok) {
-      const data = await res.json();
-      console.log(`SportMonks today raw keys: ${Object.keys(data).join(", ")}`);
-      console.log(`SportMonks today raw sample: ${JSON.stringify(data).slice(0, 500)}`);
-      const fixtures = data.data || [];
-      console.log(`SportMonks today: ${fixtures.length} fixtures`);
-      const existingIds = new Set(matches.map(m => m.id));
-      for (const fixture of fixtures.slice(0, 50)) {
-        const parsed = parseSportMonksFixture(fixture, false);
-        if (parsed && !existingIds.has(parsed.id)) {
-          matches.push(parsed);
-        }
-      }
-    } else {
-      console.warn(`SportMonks today error: ${res.status}`);
-    }
-  } catch (e) {
-    console.error("SportMonks today error:", e);
+  // Try football fixtures for today and tomorrow
+  const today = getTodayDate();
+  const tomorrow = getTomorrowDate();
+  await fetchSportMonksEndpoint(
+    `https://api.sportmonks.com/v3/football/fixtures/date/${today}?api_token=${apiKey}&include=participants;scores;league;state`,
+    "football today", matches, headers, "football", false
+  );
+  await fetchSportMonksEndpoint(
+    `https://api.sportmonks.com/v3/football/fixtures/date/${tomorrow}?api_token=${apiKey}&include=participants;scores;league;state`,
+    "football tomorrow", matches, headers, "football", false
+  );
+
+  // Try cricket (also in free plan)
+  await fetchSportMonksEndpoint(
+    `https://api.sportmonks.com/v3/cricket/livescores?api_token=${apiKey}&include=participants;scores;league;state`,
+    "cricket livescores", matches, headers, "cricket", true
+  );
+  await fetchSportMonksEndpoint(
+    `https://api.sportmonks.com/v3/cricket/fixtures/date/${today}?api_token=${apiKey}&include=participants;scores;league;state`,
+    "cricket today", matches, headers, "cricket", false
+  );
+  await fetchSportMonksEndpoint(
+    `https://api.sportmonks.com/v3/cricket/fixtures/date/${tomorrow}?api_token=${apiKey}&include=participants;scores;league;state`,
+    "cricket tomorrow", matches, headers, "cricket", false
+  );
+
+  // Also try upcoming fixtures (next 7 days) if we still have few matches
+  if (matches.length < 10) {
+    const weekLater = getDateOffset(7);
+    await fetchSportMonksEndpoint(
+      `https://api.sportmonks.com/v3/football/fixtures/between/${today}/${weekLater}?api_token=${apiKey}&include=participants;league&per_page=50`,
+      "football week", matches, headers, "football", false
+    );
   }
 
   console.log(`SportMonks total: ${matches.length} matches`);
+  return matches;
+}
+
+async function fetchSportMonksEndpoint(
+  url: string, label: string, matches: Match[], headers: Record<string, string>,
+  sport: string, isLiveEndpoint: boolean
+) {
+  try {
+    console.log(`SportMonks: fetching ${label}...`);
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      const fixtures = data.data || [];
+      console.log(`SportMonks ${label}: ${fixtures.length} results`);
+      if (fixtures.length === 0 && data.message) {
+        console.log(`SportMonks ${label} message: ${data.message}`);
+      }
+      const existingIds = new Set(matches.map(m => m.id));
+      for (const fixture of fixtures.slice(0, 50)) {
+        const parsed = parseSportMonksFixture(fixture, isLiveEndpoint, sport);
+        if (parsed && !existingIds.has(parsed.id)) {
+          matches.push(parsed);
+          existingIds.add(parsed.id);
+        }
+      }
+    } else {
+      console.warn(`SportMonks ${label} error: ${res.status}`);
+    }
+  } catch (e) {
+    console.error(`SportMonks ${label} error:`, e);
+  }
+}
   return matches;
 }
 
