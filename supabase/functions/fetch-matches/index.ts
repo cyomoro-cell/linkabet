@@ -325,7 +325,12 @@ serve(async (req) => {
     // Deduplicate by ID
     const uniqueMap = new Map<string, Match>();
     for (const m of allMatches) uniqueMap.set(m.id, m);
-    const uniqueMatches = Array.from(uniqueMap.values());
+    const uniqueMatches = Array.from(uniqueMap.values()).filter(m => {
+      // Remove ended: non-live matches whose start time has passed, or live matches past 90 min
+      if (!m.isLive && new Date(m.startTime).getTime() < Date.now()) return false;
+      if (m.isLive && m.minute && m.minute > 90) return false;
+      return true;
+    });
 
     const dbRows = uniqueMatches.map(m => ({
       id: m.id,
