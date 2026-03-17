@@ -35,6 +35,8 @@ async function fetchSportMonks(apiKey: string): Promise<Match[]> {
     const res = await fetch(liveUrl, { headers });
     if (res.ok) {
       const data = await res.json();
+      console.log(`SportMonks inplay raw keys: ${Object.keys(data).join(", ")}`);
+      console.log(`SportMonks inplay raw sample: ${JSON.stringify(data).slice(0, 500)}`);
       const fixtures = data.data || [];
       console.log(`SportMonks inplay: ${fixtures.length} live matches`);
       for (const fixture of fixtures) {
