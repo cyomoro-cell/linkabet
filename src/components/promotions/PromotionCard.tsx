@@ -2,6 +2,7 @@ import { Promotion } from '@/types';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { ArrowRight, Gift, Percent, Star } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface PromotionCardProps {
   promotion: Promotion;
@@ -43,9 +44,11 @@ export function PromotionCard({ promotion, index }: PromotionCardProps) {
         <div className="flex-1">
           <h3 className="font-bold text-lg mb-1">{promotion.title}</h3>
           <p className="text-sm text-muted-foreground mb-4">{promotion.description}</p>
-          <Button variant="outline" size="sm">
-            {promotion.ctaText}
-            <ArrowRight className="h-4 w-4" />
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/auth">
+              {promotion.ctaText}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </Button>
         </div>
       </div>

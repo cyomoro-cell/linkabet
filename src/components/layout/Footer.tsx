@@ -11,22 +11,22 @@ import {
 
 const footerLinks = {
   sports: [
-    { label: 'Football', href: '#' },
-    { label: 'Basketball', href: '#' },
-    { label: 'Tennis', href: '#' },
-    { label: 'Esports', href: '#' },
+    { label: 'Football', href: '/matches?tab=upcoming' },
+    { label: 'Basketball', href: '/matches?tab=upcoming' },
+    { label: 'Tennis', href: '/matches?tab=upcoming' },
+    { label: 'Live Betting', href: '/live' },
   ],
   company: [
-    { label: 'About Us', href: '#' },
-    { label: 'Careers', href: '#' },
-    { label: 'Press', href: '#' },
-    { label: 'Contact', href: '#' },
+    { label: 'About Us', href: '/' },
+    { label: 'Casino', href: '/casino' },
+    { label: 'Promotions', href: '/' },
+    { label: 'Contact', href: '/' },
   ],
   support: [
-    { label: 'Help Center', href: '#' },
-    { label: 'Responsible Gaming', href: '#' },
-    { label: 'Terms of Service', href: '#' },
-    { label: 'Privacy Policy', href: '#' },
+    { label: 'Help Center', href: '/' },
+    { label: 'Responsible Gaming', href: '/' },
+    { label: 'Terms of Service', href: '/' },
+    { label: 'Privacy Policy', href: '/' },
   ],
 };
 
@@ -75,12 +75,12 @@ export function Footer() {
             <ul className="space-y-2">
               {footerLinks.sports.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.href}
+                  <Link
+                    to={link.href}
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {link.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -91,12 +91,12 @@ export function Footer() {
             <ul className="space-y-2">
               {footerLinks.company.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.href}
+                  <Link
+                    to={link.href}
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {link.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -107,12 +107,12 @@ export function Footer() {
             <ul className="space-y-2">
               {footerLinks.support.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.href}
+                  <Link
+                    to={link.href}
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {link.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
