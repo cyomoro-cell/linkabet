@@ -243,6 +243,7 @@ function generateMockMatches(count: number): Match[] {
     let awayIdx = Math.floor(Math.random() * sportTeams.length);
     while (awayIdx === homeIdx && sportTeams.length > 1) awayIdx = Math.floor(Math.random() * sportTeams.length);
 
+    const isLive = Math.random() > 0.6;
     const startOffset = isLive ? 0 : (15 + Math.random() * 7 * 24) * 60 * 1000; // Always in the future
 
     matches.push({
