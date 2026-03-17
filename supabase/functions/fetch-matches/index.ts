@@ -243,8 +243,7 @@ function generateMockMatches(count: number): Match[] {
     let awayIdx = Math.floor(Math.random() * sportTeams.length);
     while (awayIdx === homeIdx && sportTeams.length > 1) awayIdx = Math.floor(Math.random() * sportTeams.length);
 
-    const isLive = Math.random() > 0.6;
-    const startOffset = isLive ? 0 : Math.random() * 7 * 24 * 60 * 60 * 1000;
+    const startOffset = isLive ? 0 : (15 + Math.random() * 7 * 24) * 60 * 1000; // Always in the future
 
     matches.push({
       id: `MOCK_${sport.name}_${league.replace(/\s/g, "")}_${i}`,
