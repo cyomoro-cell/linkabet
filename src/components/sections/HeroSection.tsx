@@ -56,13 +56,17 @@ export function HeroSection() {
             transition={{ delay: 0.4 }}
             className="flex flex-wrap gap-4 mb-12"
           >
-            <Button variant="hero" size="xl">
-              Start Betting
-              <ArrowRight className="h-5 w-5" />
+            <Button variant="hero" size="xl" asChild>
+              <Link to="/auth">
+                Start Betting
+                <ArrowRight className="h-5 w-5" />
+              </Link>
             </Button>
-            <Button variant="outline" size="xl">
-              <Play className="h-5 w-5" />
-              How It Works
+            <Button variant="outline" size="xl" asChild>
+              <Link to="/live">
+                <Play className="h-5 w-5" />
+                Watch Live
+              </Link>
             </Button>
           </motion.div>
 
