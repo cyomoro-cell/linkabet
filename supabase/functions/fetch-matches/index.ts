@@ -18,250 +18,183 @@ interface Match {
   minute?: number;
 }
 
-// ─── The Odds API ───
-// Docs: https://the-odds-api.com/liveapi/guides/v4/
-// Base: https://api.the-odds-api.com/v4/sports
-// Sports keys: soccer_epl, soccer_spain_la_liga, basketball_nba, etc.
+// ─── SportMonks API v3 (Primary) ───
+async function fetchSportMonks(apiKey: string): Promise<Match[]> {
+  const matches: Match[] = [];
+  const headers = { "Accept": "application/json" };
+  const today = getTodayDate();
+  const tomorrow = getTomorrowDate();
+  const weekLater = getDateOffset(7);
 
-const ODDS_API_SPORTS = [
-  { key: "soccer_epl", sport: "football", league: "Premier League" },
-  { key: "soccer_spain_la_liga", sport: "football", league: "La Liga" },
-  { key: "soccer_italy_serie_a", sport: "football", league: "Serie A" },
-  { key: "soccer_germany_bundesliga", sport: "football", league: "Bundesliga" },
-  { key: "soccer_france_ligue_one", sport: "football", league: "Ligue 1" },
-  { key: "soccer_uefa_champs_league", sport: "football", league: "Champions League" },
-  { key: "soccer_uefa_europa_league", sport: "football", league: "Europa League" },
-  { key: "soccer_brazil_campeonato", sport: "football", league: "Brasileirão" },
-  { key: "soccer_mexico_ligamx", sport: "football", league: "Liga MX" },
-  { key: "soccer_usa_mls", sport: "football", league: "MLS" },
-  { key: "basketball_nba", sport: "basketball", league: "NBA" },
-  { key: "basketball_euroleague", sport: "basketball", league: "EuroLeague" },
-  { key: "icehockey_nhl", sport: "ice hockey", league: "NHL" },
-  { key: "baseball_mlb", sport: "baseball", league: "MLB" },
-  { key: "mma_mixed_martial_arts", sport: "mma", league: "UFC" },
-  { key: "americanfootball_nfl", sport: "american football", league: "NFL" },
-  { key: "tennis_atp_french_open", sport: "tennis", league: "ATP Tour" },
-  { key: "tennis_wta_french_open", sport: "tennis", league: "WTA Tour" },
-  { key: "rugbyleague_nrl", sport: "rugby", league: "NRL" },
-  { key: "cricket_ipl", sport: "cricket", league: "IPL" },
-  { key: "cricket_test_match", sport: "cricket", league: "Test Cricket" },
-];
+  // Fetch football endpoints in parallel
+  const endpoints = [
+    { url: `https://api.sportmonks.com/v3/football/livescores?api_token=${apiKey}&include=participants;scores;league;state`, label: "livescores", live: true },
+    { url: `https://api.sportmonks.com/v3/football/fixtures/date/${today}?api_token=${apiKey}&include=participants;scores;league;state`, label: "today", live: false },
+    { url: `https://api.sportmonks.com/v3/football/fixtures/date/${tomorrow}?api_token=${apiKey}&include=participants;scores;league;state`, label: "tomorrow", live: false },
+    { url: `https://api.sportmonks.com/v3/football/fixtures/between/${today}/${weekLater}?api_token=${apiKey}&include=participants;league&per_page=50`, label: "week", live: false },
+  ];
 
-async function fetchOddsAPI(apiKey: string): Promise<Match[]> {
-  const allMatches: Match[] = [];
+  const results = await Promise.allSettled(
+    endpoints.map(ep => fetchSMEndpoint(ep.url, ep.label, headers, "football", ep.live))
+  );
 
-  // First get list of in-season sports to avoid wasting API calls
-  let inSeasonKeys: Set<string>;
-  try {
-    const sportsRes = await fetch(
-      `https://api.the-odds-api.com/v4/sports/?apiKey=${apiKey}`
-    );
-    if (sportsRes.ok) {
-      const sportsData = await sportsRes.json();
-      inSeasonKeys = new Set(sportsData.map((s: any) => s.key));
-      console.log(`Odds API: ${inSeasonKeys.size} sports in season`);
-    } else {
-      console.warn(`Odds API sports list error: ${sportsRes.status}`);
-      inSeasonKeys = new Set(ODDS_API_SPORTS.map(s => s.key));
-    }
-  } catch (e) {
-    console.error("Odds API sports list error:", e);
-    inSeasonKeys = new Set(ODDS_API_SPORTS.map(s => s.key));
-  }
-
-  // Filter to only in-season sports
-  const activeSports = ODDS_API_SPORTS.filter(s => inSeasonKeys.has(s.key));
-  console.log(`Odds API: fetching ${activeSports.length} active sports...`);
-
-  // Fetch odds for each active sport (batch in groups to be efficient)
-  const batchSize = 5;
-  for (let i = 0; i < activeSports.length; i += batchSize) {
-    const batch = activeSports.slice(i, i + batchSize);
-    const promises = batch.map(sportConfig => fetchOddsForSport(apiKey, sportConfig));
-    const results = await Promise.allSettled(promises);
-    
-    for (const result of results) {
-      if (result.status === "fulfilled" && result.value.length > 0) {
-        allMatches.push(...result.value);
+  const existingIds = new Set<string>();
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      for (const m of result.value) {
+        if (!existingIds.has(m.id)) {
+          matches.push(m);
+          existingIds.add(m.id);
+        }
       }
     }
-
-    // Stop if we have enough matches
-    if (allMatches.length >= 50) break;
   }
 
-  console.log(`Odds API total: ${allMatches.length} matches`);
-  return allMatches;
+  console.log(`SportMonks total: ${matches.length} matches`);
+  return matches;
 }
 
-async function fetchOddsForSport(
-  apiKey: string,
-  sportConfig: { key: string; sport: string; league: string }
+async function fetchSMEndpoint(
+  url: string, label: string, headers: Record<string, string>,
+  sport: string, isLiveEndpoint: boolean
 ): Promise<Match[]> {
   const matches: Match[] = [];
   try {
-    const url = `https://api.the-odds-api.com/v4/sports/${sportConfig.key}/odds/?apiKey=${apiKey}&regions=us,eu&markets=h2h&oddsFormat=decimal&dateFormat=iso`;
-    const res = await fetch(url);
-
-    if (!res.ok) {
-      if (res.status === 422) return []; // Sport not in season
-      console.warn(`Odds API ${sportConfig.key} error: ${res.status}`);
-      return [];
-    }
-
-    const data = await res.json();
-    if (!Array.isArray(data)) return [];
-
-    console.log(`Odds API ${sportConfig.key}: ${data.length} events`);
-
-    for (const event of data.slice(0, 15)) {
-      const parsed = parseOddsAPIEvent(event, sportConfig);
-      if (parsed) matches.push(parsed);
+    console.log(`SportMonks: fetching ${label}...`);
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      const fixtures = data.data || [];
+      console.log(`SportMonks ${label}: ${fixtures.length} results`);
+      for (const fixture of fixtures.slice(0, 50)) {
+        const parsed = parseSMFixture(fixture, isLiveEndpoint, sport);
+        if (parsed) matches.push(parsed);
+      }
+    } else {
+      console.warn(`SportMonks ${label} error: ${res.status}`);
     }
   } catch (e) {
-    console.error(`Odds API ${sportConfig.key} error:`, e);
+    console.error(`SportMonks ${label} error:`, e);
   }
   return matches;
 }
 
-function parseOddsAPIEvent(
-  event: any,
-  sportConfig: { key: string; sport: string; league: string }
-): Match | null {
-  try {
-    if (!event.home_team || !event.away_team) return null;
+function getTodayDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function getTomorrowDate(): string {
+  const d = new Date(); d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function getDateOffset(days: number): string {
+  const d = new Date(); d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
-    const commenceTime = new Date(event.commence_time);
-    const now = new Date();
-    const isLive = commenceTime <= now;
-    
-    // Skip events that started more than 3 hours ago (likely ended)
-    if (isLive && (now.getTime() - commenceTime.getTime()) > 3 * 60 * 60 * 1000) {
-      return null;
+function parseSMFixture(fixture: any, fromLive: boolean, sport: string): Match | null {
+  try {
+    const participants = fixture.participants || [];
+    if (participants.length < 2) return null;
+    const home = participants.find((p: any) => p.meta?.location === "home") || participants[0];
+    const away = participants.find((p: any) => p.meta?.location === "away") || participants[1];
+
+    let homeScore: number | undefined, awayScore: number | undefined;
+    for (const s of (fixture.scores || [])) {
+      if (["CURRENT", "2ND_HALF", "1ST_HALF"].includes(s.description)) {
+        if (s.score?.participant === "home") homeScore = s.score.goals;
+        if (s.score?.participant === "away") awayScore = s.score.goals;
+      }
     }
 
-    // Extract best odds from bookmakers
-    const odds = extractBestOdds(event, sportConfig.sport);
-    if (!odds) return null;
+    const stateId = fixture.state_id;
+    const liveStateIds = [2, 3, 4, 6, 7, 22, 23, 24, 25];
+    const endedStateIds = [5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+    const isLive = fromLive || liveStateIds.includes(stateId);
+    if (endedStateIds.includes(stateId)) return null;
 
-    // Estimate minute for live matches
     let minute: number | undefined;
-    if (isLive) {
-      const elapsedMs = now.getTime() - commenceTime.getTime();
-      minute = Math.min(90, Math.floor(elapsedMs / 60000));
+    if (isLive && fixture.state?.clock) minute = fixture.state.clock;
+    else if (isLive) {
+      if (stateId === 2) minute = Math.floor(Math.random() * 45) + 1;
+      else if (stateId === 3) minute = 45;
+      else if (stateId === 4) minute = Math.floor(Math.random() * 45) + 46;
     }
 
     return {
-      id: `ODDS_${event.id}`,
-      sport: sportConfig.sport,
-      league: sportConfig.league,
-      homeTeam: {
-        id: `ODDS_H_${event.id}`,
-        name: event.home_team,
-        score: isLive ? Math.floor(Math.random() * 4) : undefined,
-      },
-      awayTeam: {
-        id: `ODDS_A_${event.id}`,
-        name: event.away_team,
-        score: isLive ? Math.floor(Math.random() * 4) : undefined,
-      },
-      odds,
-      startTime: event.commence_time,
+      id: `SM_${fixture.id}`,
+      sport,
+      league: fixture.league?.name || "Unknown League",
+      homeTeam: { id: `SM_${home.id}`, name: home.name || "Home", score: isLive ? (homeScore ?? 0) : undefined },
+      awayTeam: { id: `SM_${away.id}`, name: away.name || "Away", score: isLive ? (awayScore ?? 0) : undefined },
+      odds: parseSMOdds(fixture, sport),
+      startTime: fixture.starting_at || new Date().toISOString(),
       isLive,
       minute,
     };
   } catch (e) {
-    console.error("Error parsing Odds API event:", e);
+    console.error("Error parsing fixture:", e);
     return null;
   }
 }
 
-function extractBestOdds(event: any, sport: string): { home: number; draw?: number; away: number } | null {
-  const bookmakers = event.bookmakers;
-  if (!bookmakers || !Array.isArray(bookmakers) || bookmakers.length === 0) {
-    return generateFallbackOdds(sport);
-  }
-
-  // Prefer well-known bookmakers
-  const preferred = ["draftkings", "fanduel", "betmgm", "williamhill", "bet365", "pinnacle", "unibet"];
-  let bm = bookmakers.find((b: any) => preferred.includes(b.key)) || bookmakers[0];
-
-  const h2hMarket = bm.markets?.find((m: any) => m.key === "h2h");
-  if (!h2hMarket || !h2hMarket.outcomes) return generateFallbackOdds(sport);
-
-  const homeOutcome = h2hMarket.outcomes.find((o: any) => o.name === event.home_team);
-  const awayOutcome = h2hMarket.outcomes.find((o: any) => o.name === event.away_team);
-  const drawOutcome = h2hMarket.outcomes.find((o: any) => o.name === "Draw");
-
-  if (!homeOutcome || !awayOutcome) return generateFallbackOdds(sport);
-
-  return {
-    home: homeOutcome.price || 2.0,
-    draw: drawOutcome?.price,
-    away: awayOutcome.price || 2.0,
-  };
+function parseSMOdds(fixture: any, sport: string): { home: number; draw?: number; away: number } {
+  try {
+    const oddsData = fixture.odds;
+    if (oddsData && Array.isArray(oddsData) && oddsData.length > 0) {
+      const mw = oddsData.find((o: any) => o.market_id === 1 || o.name === "Match Winner" || o.name === "1X2");
+      if (mw?.bookmaker?.[0]?.odds) {
+        const bm = mw.bookmaker[0].odds;
+        const h = bm.find((o: any) => o.label === "1" || o.label === "Home");
+        const d = bm.find((o: any) => o.label === "X" || o.label === "Draw");
+        const a = bm.find((o: any) => o.label === "2" || o.label === "Away");
+        if (h && a) return { home: parseFloat(h.value) || 2.0, draw: d ? parseFloat(d.value) : undefined, away: parseFloat(a.value) || 2.0 };
+      }
+    }
+  } catch {}
+  return generateFallbackOdds(sport);
 }
 
 function generateFallbackOdds(sport: string) {
   if (sport === "football" || sport === "soccer") {
-    return {
-      home: parseFloat((1.5 + Math.random() * 2).toFixed(2)),
-      draw: parseFloat((2.5 + Math.random() * 1.5).toFixed(2)),
-      away: parseFloat((1.8 + Math.random() * 2.2).toFixed(2)),
-    };
+    return { home: parseFloat((1.5 + Math.random() * 2).toFixed(2)), draw: parseFloat((2.5 + Math.random() * 1.5).toFixed(2)), away: parseFloat((1.8 + Math.random() * 2.2).toFixed(2)) };
   }
-  return {
-    home: parseFloat((1.6 + Math.random() * 1.5).toFixed(2)),
-    away: parseFloat((2.0 + Math.random() * 1.8).toFixed(2)),
-  };
+  return { home: parseFloat((1.6 + Math.random() * 1.5).toFixed(2)), away: parseFloat((2.0 + Math.random() * 1.8).toFixed(2)) };
 }
 
-// ─── Mock fallback ───
 function generateMockMatches(count: number): Match[] {
   const sports = [
     { name: "football", leagues: ["Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1", "Champions League"] },
-    { name: "basketball", leagues: ["NBA", "EuroLeague", "CBA"] },
-    { name: "tennis", leagues: ["ATP Tour", "WTA Tour", "Grand Slam"] },
-    { name: "cricket", leagues: ["IPL", "Big Bash", "International"] },
-    { name: "esports", leagues: ["LoL Worlds", "Dota 2 TI", "CS:GO Major"] },
-    { name: "mma", leagues: ["UFC", "Bellator", "ONE Championship"] },
-    { name: "ice hockey", leagues: ["NHL", "KHL", "SHL"] },
-    { name: "rugby", leagues: ["Six Nations", "Super Rugby", "Premiership"] },
-    { name: "baseball", leagues: ["MLB", "NPB", "KBO"] },
+    { name: "basketball", leagues: ["NBA", "EuroLeague"] },
+    { name: "tennis", leagues: ["ATP Tour", "WTA Tour"] },
+    { name: "ice hockey", leagues: ["NHL", "KHL"] },
+    { name: "mma", leagues: ["UFC", "Bellator"] },
+    { name: "baseball", leagues: ["MLB", "NPB"] },
   ];
   const teams: Record<string, string[]> = {
     football: ["Manchester City", "Liverpool", "Real Madrid", "Barcelona", "Bayern Munich", "PSG", "Juventus", "AC Milan", "Inter Milan", "Chelsea"],
     basketball: ["Lakers", "Warriors", "Celtics", "Bucks", "Heat", "Suns", "Nuggets", "76ers"],
-    tennis: ["Djokovic", "Alcaraz", "Sinner", "Medvedev", "Rune", "Zverev", "Fritz", "Ruud"],
-    cricket: ["India", "Australia", "England", "New Zealand", "Pakistan", "South Africa"],
-    esports: ["T1", "Gen.G", "JDG", "BLG", "Fnatic", "G2", "Cloud9", "Team Liquid"],
-    mma: ["Fighter A", "Fighter B", "Champion X", "Contender Y"],
+    tennis: ["Djokovic", "Alcaraz", "Sinner", "Medvedev", "Zverev", "Fritz"],
     "ice hockey": ["Bruins", "Rangers", "Oilers", "Panthers", "Avalanche", "Stars"],
-    rugby: ["England", "France", "Ireland", "New Zealand", "South Africa", "Australia"],
-    baseball: ["Yankees", "Dodgers", "Braves", "Astros", "Mets", "Phillies", "Padres", "Orioles"],
+    mma: ["Fighter A", "Fighter B", "Champion X", "Contender Y"],
+    baseball: ["Yankees", "Dodgers", "Braves", "Astros", "Mets", "Phillies"],
   };
-
   const matches: Match[] = [];
   for (let i = 0; i < count; i++) {
     const sport = sports[Math.floor(Math.random() * sports.length)];
     const league = sport.leagues[Math.floor(Math.random() * sport.leagues.length)];
-    const sportTeams = teams[sport.name] || ["Team A", "Team B"];
-    const homeIdx = Math.floor(Math.random() * sportTeams.length);
-    let awayIdx = Math.floor(Math.random() * sportTeams.length);
-    while (awayIdx === homeIdx && sportTeams.length > 1) awayIdx = Math.floor(Math.random() * sportTeams.length);
-
-    const isLive = false;
-    const startOffset = (15 + Math.random() * 7 * 24) * 60 * 1000;
-
+    const t = teams[sport.name] || ["Team A", "Team B"];
+    const hi = Math.floor(Math.random() * t.length);
+    let ai = Math.floor(Math.random() * t.length);
+    while (ai === hi && t.length > 1) ai = Math.floor(Math.random() * t.length);
     matches.push({
       id: `MOCK_${sport.name}_${league.replace(/\s/g, "")}_${i}_${Date.now()}`,
-      sport: sport.name,
-      league,
-      homeTeam: { id: `home_${i}`, name: sportTeams[homeIdx] },
-      awayTeam: { id: `away_${i}`, name: sportTeams[awayIdx] },
+      sport: sport.name, league,
+      homeTeam: { id: `home_${i}`, name: t[hi] },
+      awayTeam: { id: `away_${i}`, name: t[ai] },
       odds: generateFallbackOdds(sport.name),
-      startTime: new Date(Date.now() + startOffset).toISOString(),
-      isLive,
+      startTime: new Date(Date.now() + (15 + Math.random() * 168) * 60 * 1000).toISOString(),
+      isLive: false,
     });
   }
   return matches;
@@ -271,49 +204,32 @@ function shiftOdds(odds: { home: number; draw?: number; away: number }) {
   return {
     home: parseFloat(Math.max(1.01, odds.home + (Math.random() - 0.5) * 0.08).toFixed(2)),
     away: parseFloat(Math.max(1.01, odds.away + (Math.random() - 0.5) * 0.08).toFixed(2)),
-    ...(odds.draw !== undefined
-      ? { draw: parseFloat(Math.max(1.01, odds.draw + (Math.random() - 0.5) * 0.08).toFixed(2)) }
-      : {}),
+    ...(odds.draw !== undefined ? { draw: parseFloat(Math.max(1.01, odds.draw + (Math.random() - 0.5) * 0.08).toFixed(2)) } : {}),
   };
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     let allMatches: Match[] = [];
     let source = "mock-fallback";
 
-    // Primary: The Odds API
-    const oddsApiKey = Deno.env.get("ODDS_API_KEY");
-    if (oddsApiKey) {
-      console.log("Using The Odds API as primary source...");
-      allMatches = await fetchOddsAPI(oddsApiKey);
-      if (allMatches.length > 0) source = "TheOddsAPI";
+    // Primary: SportMonks API
+    const smKey = Deno.env.get("SPORTMONKS_API_KEY");
+    if (smKey) {
+      console.log("Using SportMonks API...");
+      allMatches = await fetchSportMonks(smKey);
+      if (allMatches.length > 0) source = "SportMonks";
     }
 
-    // Update live odds for existing DB matches not in current API response
-    const { data: existingMatches } = await supabase
-      .from("matches")
-      .select("id, odds, is_live, minute")
-      .eq("is_live", true);
-
-    if (existingMatches && existingMatches.length > 0) {
+    // Update live odds for existing DB matches
+    const { data: existingMatches } = await supabase.from("matches").select("id, odds, is_live, minute").eq("is_live", true);
+    if (existingMatches?.length) {
       for (const existing of existingMatches) {
-        const apiMatch = allMatches.find(m => m.id === existing.id);
-        if (!apiMatch) {
-          const shifted = shiftOdds(existing.odds as any);
-          const newMinute = (existing.minute || 0) + 1;
-          await supabase
-            .from("matches")
-            .update({ odds: shifted, minute: newMinute, updated_at: new Date().toISOString() })
-            .eq("id", existing.id);
+        if (!allMatches.find(m => m.id === existing.id)) {
+          await supabase.from("matches").update({ odds: shiftOdds(existing.odds as any), minute: (existing.minute || 0) + 1, updated_at: new Date().toISOString() }).eq("id", existing.id);
         }
       }
     }
@@ -321,61 +237,42 @@ serve(async (req) => {
     // Fill with mocks if needed
     if (allMatches.length < 15) {
       const mockCount = 15 - allMatches.length;
-      console.log(`Adding ${mockCount} mock matches to fill minimum`);
+      console.log(`Adding ${mockCount} mock matches`);
       allMatches.push(...generateMockMatches(mockCount));
     }
 
-    // Sort: live first, then by start time
     allMatches.sort((a, b) => {
       if (a.isLive && !b.isLive) return -1;
       if (!a.isLive && b.isLive) return 1;
       return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
     });
 
-    // Deduplicate and filter ended
     const uniqueMap = new Map<string, Match>();
     for (const m of allMatches) uniqueMap.set(m.id, m);
     const uniqueMatches = Array.from(uniqueMap.values()).filter(m => {
       if (!m.isLive && new Date(m.startTime).getTime() < Date.now()) return false;
-      if (m.isLive && m.minute && m.minute > 120) return false;
+      if (m.isLive && m.minute && m.minute > 90) return false;
       return true;
     });
 
-    // Upsert into DB
     const dbRows = uniqueMatches.map(m => ({
-      id: m.id,
-      sport: m.sport,
-      league: m.league,
-      home_team: m.homeTeam,
-      away_team: m.awayTeam,
-      odds: m.odds,
-      start_time: m.startTime,
-      is_live: m.isLive,
-      minute: m.minute || null,
-      updated_at: new Date().toISOString(),
+      id: m.id, sport: m.sport, league: m.league, home_team: m.homeTeam, away_team: m.awayTeam,
+      odds: m.odds, start_time: m.startTime, is_live: m.isLive, minute: m.minute || null, updated_at: new Date().toISOString(),
     }));
 
-    const { error: upsertError } = await supabase
-      .from("matches")
-      .upsert(dbRows, { onConflict: "id" });
+    const { error: upsertError } = await supabase.from("matches").upsert(dbRows, { onConflict: "id" });
+    if (upsertError) console.error("Upsert error:", upsertError);
+    else console.log(`Upserted ${dbRows.length} matches (source: ${source})`);
 
-    if (upsertError) {
-      console.error("Upsert error:", upsertError);
-    } else {
-      console.log(`Upserted ${dbRows.length} matches into DB (source: ${source})`);
-    }
-
-    // Cleanup ended matches
     await supabase.from("matches").delete().eq("is_live", false).lt("start_time", new Date().toISOString());
-    await supabase.from("matches").delete().eq("is_live", true).gt("minute", 120);
+    await supabase.from("matches").delete().eq("is_live", true).gt("minute", 90);
 
     return new Response(JSON.stringify({ matches: uniqueMatches, count: uniqueMatches.length, source }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Error:", error);
-    const mockMatches = generateMockMatches(15);
-    return new Response(JSON.stringify({ matches: mockMatches, source: "mock-fallback" }), {
+    return new Response(JSON.stringify({ matches: generateMockMatches(15), source: "mock-fallback" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
