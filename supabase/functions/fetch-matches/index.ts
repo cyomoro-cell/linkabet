@@ -18,141 +18,172 @@ interface Match {
   minute?: number;
 }
 
-// ─── SportMonks API v3 (Primary) ───
-async function fetchSportMonks(apiKey: string): Promise<Match[]> {
-  const matches: Match[] = [];
-  const headers = { "Accept": "application/json" };
-  const today = getTodayDate();
-  const tomorrow = getTomorrowDate();
-  const weekLater = getDateOffset(7);
+// ─── API-Football via RapidAPI ───
+// Host: api-football-v1.p.rapidapi.com
+// Docs: https://www.api-football.com/documentation-v3
 
-  // Fetch football endpoints in parallel
-  const endpoints = [
-    { url: `https://api.sportmonks.com/v3/football/livescores?api_token=${apiKey}&include=participants;scores;league;state`, label: "livescores", live: true },
-    { url: `https://api.sportmonks.com/v3/football/fixtures/date/${today}?api_token=${apiKey}&include=participants;scores;league;state`, label: "today", live: false },
-    { url: `https://api.sportmonks.com/v3/football/fixtures/date/${tomorrow}?api_token=${apiKey}&include=participants;scores;league;state`, label: "tomorrow", live: false },
-    { url: `https://api.sportmonks.com/v3/football/fixtures/between/${today}/${weekLater}?api_token=${apiKey}&include=participants;league&per_page=50`, label: "week", live: false },
-  ];
+const API_FOOTBALL_HOST = "api-football-v1.p.rapidapi.com";
+const API_FOOTBALL_BASE = `https://${API_FOOTBALL_HOST}/v3`;
 
-  const results = await Promise.allSettled(
-    endpoints.map(ep => fetchSMEndpoint(ep.url, ep.label, headers, "football", ep.live))
-  );
+async function fetchAPIFootball(rapidApiKey: string): Promise<Match[]> {
+  const headers = {
+    "X-RapidAPI-Key": rapidApiKey,
+    "X-RapidAPI-Host": API_FOOTBALL_HOST,
+  };
 
+  const allMatches: Match[] = [];
   const existingIds = new Set<string>();
-  for (const result of results) {
+
+  // Fetch live matches and today's fixtures in parallel
+  const today = new Date().toISOString().split("T")[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+
+  const [liveResult, todayResult, tomorrowResult] = await Promise.allSettled([
+    fetchAFEndpoint(`${API_FOOTBALL_BASE}/fixtures?live=all`, "live", headers, true),
+    fetchAFEndpoint(`${API_FOOTBALL_BASE}/fixtures?date=${today}`, "today", headers, false),
+    fetchAFEndpoint(`${API_FOOTBALL_BASE}/fixtures?date=${tomorrow}`, "tomorrow", headers, false),
+  ]);
+
+  for (const result of [liveResult, todayResult, tomorrowResult]) {
     if (result.status === "fulfilled") {
       for (const m of result.value) {
         if (!existingIds.has(m.id)) {
-          matches.push(m);
+          allMatches.push(m);
           existingIds.add(m.id);
         }
       }
     }
   }
 
-  console.log(`SportMonks total: ${matches.length} matches`);
-  return matches;
+  // If we have fixtures, try to get odds for some of them
+  if (allMatches.length > 0) {
+    try {
+      const oddsRes = await fetch(`${API_FOOTBALL_BASE}/odds?date=${today}&bookmaker=8`, { headers });
+      if (oddsRes.ok) {
+        const oddsData = await oddsRes.json();
+        const oddsMap = parseOddsResponse(oddsData);
+        for (const match of allMatches) {
+          const fixtureId = match.id.replace("AF_", "");
+          if (oddsMap.has(fixtureId)) {
+            match.odds = oddsMap.get(fixtureId)!;
+          }
+        }
+        console.log(`API-Football odds: ${oddsMap.size} fixtures with odds`);
+      }
+    } catch (e) {
+      console.warn("Odds fetch error:", e);
+    }
+  }
+
+  console.log(`API-Football total: ${allMatches.length} matches`);
+  return allMatches;
 }
 
-async function fetchSMEndpoint(
-  url: string, label: string, headers: Record<string, string>,
-  sport: string, isLiveEndpoint: boolean
-): Promise<Match[]> {
+async function fetchAFEndpoint(url: string, label: string, headers: Record<string, string>, isLive: boolean): Promise<Match[]> {
   const matches: Match[] = [];
   try {
-    console.log(`SportMonks: fetching ${label}...`);
+    console.log(`API-Football: fetching ${label}...`);
     const res = await fetch(url, { headers });
-    if (res.ok) {
-      const data = await res.json();
-      const fixtures = data.data || [];
-      console.log(`SportMonks ${label}: ${fixtures.length} results`);
-      for (const fixture of fixtures.slice(0, 50)) {
-        const parsed = parseSMFixture(fixture, isLiveEndpoint, sport);
-        if (parsed) matches.push(parsed);
-      }
-    } else {
-      console.warn(`SportMonks ${label} error: ${res.status}`);
+    if (!res.ok) {
+      console.warn(`API-Football ${label} error: ${res.status}`);
+      const body = await res.text();
+      console.warn(`API-Football ${label} body: ${body.substring(0, 200)}`);
+      return [];
+    }
+    const data = await res.json();
+    const fixtures = data.response || [];
+    console.log(`API-Football ${label}: ${fixtures.length} fixtures`);
+
+    for (const fixture of fixtures.slice(0, 60)) {
+      const parsed = parseAFFixture(fixture, isLive);
+      if (parsed) matches.push(parsed);
     }
   } catch (e) {
-    console.error(`SportMonks ${label} error:`, e);
+    console.error(`API-Football ${label} error:`, e);
   }
   return matches;
 }
 
-function getTodayDate(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function getTomorrowDate(): string {
-  const d = new Date(); d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function getDateOffset(days: number): string {
-  const d = new Date(); d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function parseSMFixture(fixture: any, fromLive: boolean, sport: string): Match | null {
+function parseAFFixture(fixture: any, fromLiveEndpoint: boolean): Match | null {
   try {
-    const participants = fixture.participants || [];
-    if (participants.length < 2) return null;
-    const home = participants.find((p: any) => p.meta?.location === "home") || participants[0];
-    const away = participants.find((p: any) => p.meta?.location === "away") || participants[1];
+    const f = fixture.fixture;
+    const teams = fixture.teams;
+    const goals = fixture.goals;
+    const league = fixture.league;
+    const score = fixture.score;
 
-    let homeScore: number | undefined, awayScore: number | undefined;
-    for (const s of (fixture.scores || [])) {
-      if (["CURRENT", "2ND_HALF", "1ST_HALF"].includes(s.description)) {
-        if (s.score?.participant === "home") homeScore = s.score.goals;
-        if (s.score?.participant === "away") awayScore = s.score.goals;
-      }
-    }
+    if (!f || !teams?.home || !teams?.away) return null;
 
-    const stateId = fixture.state_id;
-    const liveStateIds = [2, 3, 4, 6, 7, 22, 23, 24, 25];
-    const endedStateIds = [5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
-    const isLive = fromLive || liveStateIds.includes(stateId);
-    if (endedStateIds.includes(stateId)) return null;
+    // Determine status
+    const status = f.status?.short || "";
+    const endedStatuses = ["FT", "AET", "PEN", "WO", "AWD", "CANC", "ABD", "PST"];
+    if (endedStatuses.includes(status)) return null;
 
+    const liveStatuses = ["1H", "HT", "2H", "ET", "BT", "P", "SUSP", "INT", "LIVE"];
+    const isLive = fromLiveEndpoint || liveStatuses.includes(status);
+
+    // Parse minute
     let minute: number | undefined;
-    if (isLive && fixture.state?.clock) minute = fixture.state.clock;
-    else if (isLive) {
-      if (stateId === 2) minute = Math.floor(Math.random() * 45) + 1;
-      else if (stateId === 3) minute = 45;
-      else if (stateId === 4) minute = Math.floor(Math.random() * 45) + 46;
+    if (isLive && f.status?.elapsed) {
+      minute = f.status.elapsed;
     }
+
+    // Scores
+    const homeScore = isLive ? (goals?.home ?? 0) : undefined;
+    const awayScore = isLive ? (goals?.away ?? 0) : undefined;
 
     return {
-      id: `SM_${fixture.id}`,
-      sport,
-      league: fixture.league?.name || "Unknown League",
-      homeTeam: { id: `SM_${home.id}`, name: home.name || "Home", score: isLive ? (homeScore ?? 0) : undefined },
-      awayTeam: { id: `SM_${away.id}`, name: away.name || "Away", score: isLive ? (awayScore ?? 0) : undefined },
-      odds: parseSMOdds(fixture, sport),
-      startTime: fixture.starting_at || new Date().toISOString(),
+      id: `AF_${f.id}`,
+      sport: "football",
+      league: league?.name || "Unknown League",
+      homeTeam: {
+        id: `AF_${teams.home.id}`,
+        name: teams.home.name || "Home",
+        score: homeScore,
+      },
+      awayTeam: {
+        id: `AF_${teams.away.id}`,
+        name: teams.away.name || "Away",
+        score: awayScore,
+      },
+      odds: generateFallbackOdds("football"),
+      startTime: f.date || new Date().toISOString(),
       isLive,
       minute,
     };
   } catch (e) {
-    console.error("Error parsing fixture:", e);
+    console.error("Error parsing AF fixture:", e);
     return null;
   }
 }
 
-function parseSMOdds(fixture: any, sport: string): { home: number; draw?: number; away: number } {
+function parseOddsResponse(data: any): Map<string, { home: number; draw?: number; away: number }> {
+  const map = new Map<string, { home: number; draw?: number; away: number }>();
   try {
-    const oddsData = fixture.odds;
-    if (oddsData && Array.isArray(oddsData) && oddsData.length > 0) {
-      const mw = oddsData.find((o: any) => o.market_id === 1 || o.name === "Match Winner" || o.name === "1X2");
-      if (mw?.bookmaker?.[0]?.odds) {
-        const bm = mw.bookmaker[0].odds;
-        const h = bm.find((o: any) => o.label === "1" || o.label === "Home");
-        const d = bm.find((o: any) => o.label === "X" || o.label === "Draw");
-        const a = bm.find((o: any) => o.label === "2" || o.label === "Away");
-        if (h && a) return { home: parseFloat(h.value) || 2.0, draw: d ? parseFloat(d.value) : undefined, away: parseFloat(a.value) || 2.0 };
+    const responses = data.response || [];
+    for (const item of responses) {
+      const fixtureId = String(item.fixture?.id);
+      const bookmakers = item.bookmakers || [];
+      if (bookmakers.length === 0) continue;
+
+      const bm = bookmakers[0]; // First bookmaker
+      const matchWinner = bm.bets?.find((b: any) => b.name === "Match Winner" || b.id === 1);
+      if (!matchWinner?.values) continue;
+
+      const homeVal = matchWinner.values.find((v: any) => v.value === "Home");
+      const drawVal = matchWinner.values.find((v: any) => v.value === "Draw");
+      const awayVal = matchWinner.values.find((v: any) => v.value === "Away");
+
+      if (homeVal && awayVal) {
+        map.set(fixtureId, {
+          home: parseFloat(homeVal.odd) || 2.0,
+          draw: drawVal ? parseFloat(drawVal.odd) : undefined,
+          away: parseFloat(awayVal.odd) || 2.0,
+        });
       }
     }
   } catch {}
-  return generateFallbackOdds(sport);
+  return map;
 }
 
 function generateFallbackOdds(sport: string) {
@@ -216,12 +247,12 @@ serve(async (req) => {
     let allMatches: Match[] = [];
     let source = "mock-fallback";
 
-    // Primary: SportMonks API
-    const smKey = Deno.env.get("SPORTMONKS_API_KEY");
-    if (smKey) {
-      console.log("Using SportMonks API...");
-      allMatches = await fetchSportMonks(smKey);
-      if (allMatches.length > 0) source = "SportMonks";
+    // Primary: API-Football via RapidAPI
+    const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
+    if (rapidApiKey) {
+      console.log("Using API-Football (RapidAPI)...");
+      allMatches = await fetchAPIFootball(rapidApiKey);
+      if (allMatches.length > 0) source = "API-Football";
     }
 
     // Update live odds for existing DB matches
