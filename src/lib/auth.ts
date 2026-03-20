@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { db, Profile, UserRole, Wallet } from '@/lib/supabase';
+import { Profile, Wallet } from '@/lib/supabase';
 import { z } from 'zod';
 
 // Password validation schema - Medium security (6+ chars with at least one number)
@@ -82,7 +82,7 @@ export async function getCurrentUser() {
 }
 
 export async function getUserRole(userId: string): Promise<string> {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('user_roles')
     .select('role')
     .eq('user_id', userId)
@@ -93,11 +93,11 @@ export async function getUserRole(userId: string): Promise<string> {
     return 'user';
   }
 
-  return (data as UserRole)?.role || 'user';
+  return data?.role || 'user';
 }
 
 export async function getUserProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', userId)
@@ -108,11 +108,11 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
     return null;
   }
 
-  return data as Profile;
+  return data;
 }
 
 export async function getUserWallet(userId: string): Promise<Wallet | null> {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('wallets')
     .select('*')
     .eq('user_id', userId)
@@ -123,5 +123,5 @@ export async function getUserWallet(userId: string): Promise<Wallet | null> {
     return null;
   }
 
-  return data as Wallet;
+  return data;
 }

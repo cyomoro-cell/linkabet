@@ -1,78 +1,24 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
+import { Database } from '../integrations/supabase/types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
 
-// Create an untyped client for tables not yet in the generated types
-export const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+// Create a typed client
+export const db = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     persistSession: true,
     autoRefreshToken: true,
   }
-}) as SupabaseClient<any>;
+});
 
-// Type definitions for our custom tables
-export interface Profile {
-  id: string;
-  email: string;
-  phone: string | null;
-  username: string | null;
-  avatar_url: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface UserRole {
-  id: string;
-  user_id: string;
-  role: 'user' | 'admin' | 'master';
-  created_at: string;
-}
-
-export interface Wallet {
-  id: string;
-  user_id: string;
-  balance: number;
-  currency: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Transaction {
-  id: string;
-  user_id: string;
-  type: 'deposit' | 'withdrawal' | 'bet' | 'win' | 'ai_fee' | 'refund';
-  amount: number;
-  fee: number;
-  net_amount: number;
-  description: string | null;
-  reference_id: string | null;
-  status: string;
-  created_at: string;
-}
-
-export interface Bet {
-  id: string;
-  user_id: string;
-  match_id: string;
-  match_data: any;
-  selections: any;
-  stake: number;
-  total_odds: number;
-  potential_win: number;
-  status: 'pending' | 'won' | 'lost' | 'cancelled' | 'cashout';
-  result_data: any;
-  created_at: string;
-  settled_at: string | null;
-}
-
-export interface AIUsage {
-  id: string;
-  user_id: string;
-  prompt: string;
-  response: string | null;
-  tokens_used: number;
-  fee_charged: number;
-  created_at: string;
-}
+// Type definitions for our custom tables from the Database type
+export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type UserRole = Database['public']['Tables']['user_roles']['Row'];
+export type Wallet = Database['public']['Tables']['wallets']['Row'];
+export type Transaction = Database['public']['Tables']['transactions']['Row'];
+export type Bet = Database['public']['Tables']['bets']['Row'];
+export type AIUsage = Database['public']['Tables']['ai_usage']['Row'];
+export type SystemSetting = Database['public']['Tables']['system_settings']['Row'];
+export type Match = Database['public']['Tables']['matches']['Row'];

@@ -71,5 +71,5 @@ export function useBetNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAuthenticated, user?.id]);
+  }, [isAuthenticated, user, refreshWallet]);
 }
