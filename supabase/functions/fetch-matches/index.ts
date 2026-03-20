@@ -18,23 +18,20 @@ interface Match {
   minute?: number;
 }
 
-// ─── AllSportsAPI via RapidAPI ───
-// Host: allsportsapi2.p.rapidapi.com
-// Docs: https://allsportsapi.com/soccer-football-api-documentation
-
+// ─── AllSportsAPI via RapidAPI (SofaScore data) ───
 const API_HOST = "allsportsapi2.p.rapidapi.com";
 const API_BASE = `https://${API_HOST}`;
 
-// Sport configs for AllSportsAPI
-const SPORT_CONFIGS = [
-  { path: "football", sport: "football" },
-  { path: "basketball", sport: "basketball" },
-  { path: "tennis", sport: "tennis" },
-  { path: "cricket", sport: "cricket" },
-  { path: "hockey", sport: "ice hockey" },
-  { path: "baseball", sport: "baseball" },
-  { path: "american-football", sport: "american football" },
-  { path: "mma", sport: "mma" },
+// Sports to fetch — using known endpoint patterns
+const SPORTS = [
+  { slug: "football", sport: "football" },
+  { slug: "basketball", sport: "basketball" },
+  { slug: "tennis", sport: "tennis" },
+  { slug: "cricket", sport: "cricket" },
+  { slug: "ice-hockey", sport: "ice hockey" },
+  { slug: "baseball", sport: "baseball" },
+  { slug: "american-football", sport: "american football" },
+  { slug: "mma", sport: "mma" },
 ];
 
 async function fetchAllSportsAPI(rapidApiKey: string): Promise<Match[]> {
@@ -44,53 +41,58 @@ async function fetchAllSportsAPI(rapidApiKey: string): Promise<Match[]> {
   };
 
   const allMatches: Match[] = [];
-  const today = getTodayDate();
-  const tomorrow = getTomorrowDate();
-
-  // Fetch livescores and fixtures for each sport in parallel
-  const promises: Promise<Match[]>[] = [];
-
-  for (const config of SPORT_CONFIGS) {
-    // Livescores
-    promises.push(
-      fetchEndpoint(
-        `${API_BASE}/api/${config.path}/matches/live`,
-        `${config.sport} live`, headers, config.sport, true
-      )
-    );
-    // Today's fixtures
-    promises.push(
-      fetchEndpoint(
-        `${API_BASE}/api/${config.path}/matches/${today}`,
-        `${config.sport} today`, headers, config.sport, false
-      )
-    );
-  }
-
-  // Also fetch tomorrow for football
-  promises.push(
-    fetchEndpoint(
-      `${API_BASE}/api/football/matches/${tomorrow}`,
-      "football tomorrow", headers, "football", false
-    )
-  );
-
-  const results = await Promise.allSettled(promises);
   const existingIds = new Set<string>();
 
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      for (const m of result.value) {
-        if (!existingIds.has(m.id)) {
-          allMatches.push(m);
-          existingIds.add(m.id);
-        }
-      }
+  // SofaScore-style: /api/sport/scheduled-events/YYYY-MM-DD
+  // and /api/sport/events/live
+  const today = getTodayDate();
+
+  // Fetch sequentially to avoid rate limits (free tier)
+  for (const s of SPORTS) {
+    if (allMatches.length >= 60) break;
+
+    // Try scheduled events for today
+    const scheduled = await fetchEndpoint(
+      `${API_BASE}/api/${s.slug}/scheduled-events/${today}`,
+      `${s.sport} scheduled`, headers, s.sport, false
+    );
+    for (const m of scheduled) {
+      if (!existingIds.has(m.id)) { allMatches.push(m); existingIds.add(m.id); }
+    }
+
+    // Small delay to avoid rate limit
+    await delay(200);
+
+    // Try live events
+    const live = await fetchEndpoint(
+      `${API_BASE}/api/${s.slug}/events/live`,
+      `${s.sport} live`, headers, s.sport, true
+    );
+    for (const m of live) {
+      if (!existingIds.has(m.id)) { allMatches.push(m); existingIds.add(m.id); }
+    }
+
+    await delay(200);
+  }
+
+  // If still low, try tomorrow for football
+  if (allMatches.length < 20) {
+    const tomorrow = getTomorrowDate();
+    const tomorrowMatches = await fetchEndpoint(
+      `${API_BASE}/api/football/scheduled-events/${tomorrow}`,
+      "football tomorrow", headers, "football", false
+    );
+    for (const m of tomorrowMatches) {
+      if (!existingIds.has(m.id)) { allMatches.push(m); existingIds.add(m.id); }
     }
   }
 
   console.log(`AllSportsAPI total: ${allMatches.length} matches`);
   return allMatches;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function fetchEndpoint(
@@ -103,20 +105,21 @@ async function fetchEndpoint(
     const res = await fetch(url, { headers });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.warn(`${label} error: ${res.status} - ${body.substring(0, 150)}`);
+      console.warn(`${label}: ${res.status} - ${body.substring(0, 100)}`);
       return [];
     }
     const data = await res.json();
-    const events = data.events || data.matches || data.data || [];
     
+    // AllSportsAPI returns { events: [...] }
+    const events = data.events || [];
     if (!Array.isArray(events)) {
-      console.log(`${label}: unexpected response format`);
+      console.log(`${label}: no events array, keys: ${Object.keys(data).join(",")}`);
       return [];
     }
     
     console.log(`${label}: ${events.length} events`);
 
-    for (const event of events.slice(0, 30)) {
+    for (const event of events.slice(0, 25)) {
       const parsed = parseEvent(event, sport, isLive);
       if (parsed) matches.push(parsed);
     }
@@ -128,51 +131,52 @@ async function fetchEndpoint(
 
 function parseEvent(event: any, sport: string, fromLive: boolean): Match | null {
   try {
-    // AllSportsAPI event structure
-    const homeTeam = event.homeTeam || event.home_team || event.homeScore?.current !== undefined ? event : null;
-    const awayTeam = event.awayTeam || event.away_team;
-
-    // Try different field names
-    const homeName = event.homeTeam?.name || event.home_team_name || event.strHomeTeam || event.homeTeam?.shortName || "";
-    const awayName = event.awayTeam?.name || event.away_team_name || event.strAwayTeam || event.awayTeam?.shortName || "";
-    
+    // SofaScore/AllSportsAPI event structure
+    const homeName = event.homeTeam?.name || event.homeTeam?.shortName || "";
+    const awayName = event.awayTeam?.name || event.awayTeam?.shortName || "";
     if (!homeName || !awayName) return null;
 
-    const homeId = event.homeTeam?.id || event.home_team_key || event.idHomeTeam || String(event.id) + "_h";
-    const awayId = event.awayTeam?.id || event.away_team_key || event.idAwayTeam || String(event.id) + "_a";
-
-    // Scores
-    const homeScore = event.homeScore?.current ?? event.home_score ?? event.intHomeScore ?? undefined;
-    const awayScore = event.awayScore?.current ?? event.away_score ?? event.intAwayScore ?? undefined;
+    const homeId = event.homeTeam?.id || "";
+    const awayId = event.awayTeam?.id || "";
 
     // Status
+    const statusCode = event.status?.code;
     const statusType = event.status?.type || "";
-    const statusDesc = event.status?.description || event.match_status || "";
-    const isLive = fromLive || statusType === "inprogress" || ["1H", "2H", "HT", "ET", "LIVE"].includes(statusDesc);
-    const isFinished = statusType === "finished" || ["FT", "AET", "PEN", "AP"].includes(statusDesc);
+    // code: 0=not started, 6=1st half, 7=2nd half, 31=HT, 100=ended, etc.
+    const isFinished = statusType === "finished" || statusCode === 100;
     if (isFinished) return null;
+
+    const isLive = fromLive || statusType === "inprogress" || [6, 7, 31, 41, 42].includes(statusCode);
+
+    // Scores
+    const homeScore = event.homeScore?.current ?? event.homeScore?.display;
+    const awayScore = event.awayScore?.current ?? event.awayScore?.display;
 
     // Minute
     let minute: number | undefined;
     if (isLive) {
-      minute = event.time?.currentPeriodStart || event.match_minute || event.status?.liveMinute;
-      if (!minute && event.statusTime) minute = parseInt(event.statusTime);
+      // SofaScore uses statusTime or we can calculate from startTimestamp
+      if (event.statusTime?.played) {
+        minute = Math.floor(event.statusTime.played / 60);
+      } else if (event.time?.currentPeriodStartTimestamp) {
+        const elapsed = Math.floor((Date.now() / 1000 - event.time.currentPeriodStartTimestamp));
+        minute = Math.max(0, Math.floor(elapsed / 60));
+      } else if (event.startTimestamp) {
+        const elapsed = Math.floor(Date.now() / 1000 - event.startTimestamp);
+        minute = Math.min(90, Math.max(0, Math.floor(elapsed / 60)));
+      }
     }
 
-    // League
-    const league = event.tournament?.name || event.league_name || event.strLeague || "Unknown League";
+    // Tournament / League
+    const league = event.tournament?.name || event.tournament?.uniqueTournament?.name || "Unknown League";
 
     // Start time
-    const startTimestamp = event.startTimestamp || event.match_time;
-    const startTime = startTimestamp 
-      ? new Date(typeof startTimestamp === 'number' ? startTimestamp * 1000 : startTimestamp).toISOString()
-      : event.startTime || new Date().toISOString();
-
-    // Odds
-    const odds = parseEventOdds(event, sport);
+    const startTime = event.startTimestamp
+      ? new Date(event.startTimestamp * 1000).toISOString()
+      : new Date().toISOString();
 
     return {
-      id: `AS_${event.id || event.match_id || Math.random().toString(36).substring(7)}`,
+      id: `AS_${event.id}`,
       sport,
       league,
       homeTeam: {
@@ -185,7 +189,7 @@ function parseEvent(event: any, sport: string, fromLive: boolean): Match | null 
         name: awayName,
         score: isLive ? (awayScore !== undefined ? Number(awayScore) : 0) : undefined,
       },
-      odds,
+      odds: generateFallbackOdds(sport),
       startTime,
       isLive,
       minute,
@@ -194,20 +198,6 @@ function parseEvent(event: any, sport: string, fromLive: boolean): Match | null 
     console.error("Parse error:", e);
     return null;
   }
-}
-
-function parseEventOdds(event: any, sport: string): { home: number; draw?: number; away: number } {
-  try {
-    if (event.odds) {
-      const h = event.odds["1"] || event.odds.home;
-      const d = event.odds["X"] || event.odds.draw;
-      const a = event.odds["2"] || event.odds.away;
-      if (h && a) {
-        return { home: parseFloat(h), draw: d ? parseFloat(d) : undefined, away: parseFloat(a) };
-      }
-    }
-  } catch {}
-  return generateFallbackOdds(sport);
 }
 
 function getTodayDate(): string {
@@ -280,7 +270,6 @@ serve(async (req) => {
     let allMatches: Match[] = [];
     let source = "mock-fallback";
 
-    // Primary: AllSportsAPI via RapidAPI
     const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
     if (rapidApiKey) {
       console.log("Using AllSportsAPI (RapidAPI)...");
@@ -298,7 +287,6 @@ serve(async (req) => {
       }
     }
 
-    // Fill with mocks if needed
     if (allMatches.length < 15) {
       const mockCount = 15 - allMatches.length;
       console.log(`Adding ${mockCount} mock matches`);
