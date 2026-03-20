@@ -18,33 +18,67 @@ interface Match {
   minute?: number;
 }
 
-// ─── API-Football via RapidAPI ───
-// Host: api-football-v1.p.rapidapi.com
-// Docs: https://www.api-football.com/documentation-v3
+// ─── AllSportsAPI via RapidAPI ───
+// Host: allsportsapi2.p.rapidapi.com
+// Docs: https://allsportsapi.com/soccer-football-api-documentation
 
-const API_FOOTBALL_HOST = "api-football-v1.p.rapidapi.com";
-const API_FOOTBALL_BASE = `https://${API_FOOTBALL_HOST}/v3`;
+const API_HOST = "allsportsapi2.p.rapidapi.com";
+const API_BASE = `https://${API_HOST}`;
 
-async function fetchAPIFootball(rapidApiKey: string): Promise<Match[]> {
+// Sport configs for AllSportsAPI
+const SPORT_CONFIGS = [
+  { path: "football", sport: "football" },
+  { path: "basketball", sport: "basketball" },
+  { path: "tennis", sport: "tennis" },
+  { path: "cricket", sport: "cricket" },
+  { path: "hockey", sport: "ice hockey" },
+  { path: "baseball", sport: "baseball" },
+  { path: "american-football", sport: "american football" },
+  { path: "mma", sport: "mma" },
+];
+
+async function fetchAllSportsAPI(rapidApiKey: string): Promise<Match[]> {
   const headers = {
     "X-RapidAPI-Key": rapidApiKey,
-    "X-RapidAPI-Host": API_FOOTBALL_HOST,
+    "X-RapidAPI-Host": API_HOST,
   };
 
   const allMatches: Match[] = [];
+  const today = getTodayDate();
+  const tomorrow = getTomorrowDate();
+
+  // Fetch livescores and fixtures for each sport in parallel
+  const promises: Promise<Match[]>[] = [];
+
+  for (const config of SPORT_CONFIGS) {
+    // Livescores
+    promises.push(
+      fetchEndpoint(
+        `${API_BASE}/api/${config.path}/matches/live`,
+        `${config.sport} live`, headers, config.sport, true
+      )
+    );
+    // Today's fixtures
+    promises.push(
+      fetchEndpoint(
+        `${API_BASE}/api/${config.path}/matches/${today}`,
+        `${config.sport} today`, headers, config.sport, false
+      )
+    );
+  }
+
+  // Also fetch tomorrow for football
+  promises.push(
+    fetchEndpoint(
+      `${API_BASE}/api/football/matches/${tomorrow}`,
+      "football tomorrow", headers, "football", false
+    )
+  );
+
+  const results = await Promise.allSettled(promises);
   const existingIds = new Set<string>();
 
-  // Fetch live matches and today's fixtures in parallel
-  const today = new Date().toISOString().split("T")[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
-
-  const [liveResult, todayResult, tomorrowResult] = await Promise.allSettled([
-    fetchAFEndpoint(`${API_FOOTBALL_BASE}/fixtures?live=all`, "live", headers, true),
-    fetchAFEndpoint(`${API_FOOTBALL_BASE}/fixtures?date=${today}`, "today", headers, false),
-    fetchAFEndpoint(`${API_FOOTBALL_BASE}/fixtures?date=${tomorrow}`, "tomorrow", headers, false),
-  ]);
-
-  for (const result of [liveResult, todayResult, tomorrowResult]) {
+  for (const result of results) {
     if (result.status === "fulfilled") {
       for (const m of result.value) {
         if (!existingIds.has(m.id)) {
@@ -55,135 +89,134 @@ async function fetchAPIFootball(rapidApiKey: string): Promise<Match[]> {
     }
   }
 
-  // If we have fixtures, try to get odds for some of them
-  if (allMatches.length > 0) {
-    try {
-      const oddsRes = await fetch(`${API_FOOTBALL_BASE}/odds?date=${today}&bookmaker=8`, { headers });
-      if (oddsRes.ok) {
-        const oddsData = await oddsRes.json();
-        const oddsMap = parseOddsResponse(oddsData);
-        for (const match of allMatches) {
-          const fixtureId = match.id.replace("AF_", "");
-          if (oddsMap.has(fixtureId)) {
-            match.odds = oddsMap.get(fixtureId)!;
-          }
-        }
-        console.log(`API-Football odds: ${oddsMap.size} fixtures with odds`);
-      }
-    } catch (e) {
-      console.warn("Odds fetch error:", e);
-    }
-  }
-
-  console.log(`API-Football total: ${allMatches.length} matches`);
+  console.log(`AllSportsAPI total: ${allMatches.length} matches`);
   return allMatches;
 }
 
-async function fetchAFEndpoint(url: string, label: string, headers: Record<string, string>, isLive: boolean): Promise<Match[]> {
+async function fetchEndpoint(
+  url: string, label: string, headers: Record<string, string>,
+  sport: string, isLive: boolean
+): Promise<Match[]> {
   const matches: Match[] = [];
   try {
-    console.log(`API-Football: fetching ${label}...`);
+    console.log(`Fetching ${label}...`);
     const res = await fetch(url, { headers });
     if (!res.ok) {
-      console.warn(`API-Football ${label} error: ${res.status}`);
-      const body = await res.text();
-      console.warn(`API-Football ${label} body: ${body.substring(0, 200)}`);
+      const body = await res.text().catch(() => "");
+      console.warn(`${label} error: ${res.status} - ${body.substring(0, 150)}`);
       return [];
     }
     const data = await res.json();
-    const fixtures = data.response || [];
-    console.log(`API-Football ${label}: ${fixtures.length} fixtures`);
+    const events = data.events || data.matches || data.data || [];
+    
+    if (!Array.isArray(events)) {
+      console.log(`${label}: unexpected response format`);
+      return [];
+    }
+    
+    console.log(`${label}: ${events.length} events`);
 
-    for (const fixture of fixtures.slice(0, 60)) {
-      const parsed = parseAFFixture(fixture, isLive);
+    for (const event of events.slice(0, 30)) {
+      const parsed = parseEvent(event, sport, isLive);
       if (parsed) matches.push(parsed);
     }
   } catch (e) {
-    console.error(`API-Football ${label} error:`, e);
+    console.error(`${label} error:`, e);
   }
   return matches;
 }
 
-function parseAFFixture(fixture: any, fromLiveEndpoint: boolean): Match | null {
+function parseEvent(event: any, sport: string, fromLive: boolean): Match | null {
   try {
-    const f = fixture.fixture;
-    const teams = fixture.teams;
-    const goals = fixture.goals;
-    const league = fixture.league;
-    const score = fixture.score;
+    // AllSportsAPI event structure
+    const homeTeam = event.homeTeam || event.home_team || event.homeScore?.current !== undefined ? event : null;
+    const awayTeam = event.awayTeam || event.away_team;
 
-    if (!f || !teams?.home || !teams?.away) return null;
+    // Try different field names
+    const homeName = event.homeTeam?.name || event.home_team_name || event.strHomeTeam || event.homeTeam?.shortName || "";
+    const awayName = event.awayTeam?.name || event.away_team_name || event.strAwayTeam || event.awayTeam?.shortName || "";
+    
+    if (!homeName || !awayName) return null;
 
-    // Determine status
-    const status = f.status?.short || "";
-    const endedStatuses = ["FT", "AET", "PEN", "WO", "AWD", "CANC", "ABD", "PST"];
-    if (endedStatuses.includes(status)) return null;
-
-    const liveStatuses = ["1H", "HT", "2H", "ET", "BT", "P", "SUSP", "INT", "LIVE"];
-    const isLive = fromLiveEndpoint || liveStatuses.includes(status);
-
-    // Parse minute
-    let minute: number | undefined;
-    if (isLive && f.status?.elapsed) {
-      minute = f.status.elapsed;
-    }
+    const homeId = event.homeTeam?.id || event.home_team_key || event.idHomeTeam || String(event.id) + "_h";
+    const awayId = event.awayTeam?.id || event.away_team_key || event.idAwayTeam || String(event.id) + "_a";
 
     // Scores
-    const homeScore = isLive ? (goals?.home ?? 0) : undefined;
-    const awayScore = isLive ? (goals?.away ?? 0) : undefined;
+    const homeScore = event.homeScore?.current ?? event.home_score ?? event.intHomeScore ?? undefined;
+    const awayScore = event.awayScore?.current ?? event.away_score ?? event.intAwayScore ?? undefined;
+
+    // Status
+    const statusType = event.status?.type || "";
+    const statusDesc = event.status?.description || event.match_status || "";
+    const isLive = fromLive || statusType === "inprogress" || ["1H", "2H", "HT", "ET", "LIVE"].includes(statusDesc);
+    const isFinished = statusType === "finished" || ["FT", "AET", "PEN", "AP"].includes(statusDesc);
+    if (isFinished) return null;
+
+    // Minute
+    let minute: number | undefined;
+    if (isLive) {
+      minute = event.time?.currentPeriodStart || event.match_minute || event.status?.liveMinute;
+      if (!minute && event.statusTime) minute = parseInt(event.statusTime);
+    }
+
+    // League
+    const league = event.tournament?.name || event.league_name || event.strLeague || "Unknown League";
+
+    // Start time
+    const startTimestamp = event.startTimestamp || event.match_time;
+    const startTime = startTimestamp 
+      ? new Date(typeof startTimestamp === 'number' ? startTimestamp * 1000 : startTimestamp).toISOString()
+      : event.startTime || new Date().toISOString();
+
+    // Odds
+    const odds = parseEventOdds(event, sport);
 
     return {
-      id: `AF_${f.id}`,
-      sport: "football",
-      league: league?.name || "Unknown League",
+      id: `AS_${event.id || event.match_id || Math.random().toString(36).substring(7)}`,
+      sport,
+      league,
       homeTeam: {
-        id: `AF_${teams.home.id}`,
-        name: teams.home.name || "Home",
-        score: homeScore,
+        id: `AS_${homeId}`,
+        name: homeName,
+        score: isLive ? (homeScore !== undefined ? Number(homeScore) : 0) : undefined,
       },
       awayTeam: {
-        id: `AF_${teams.away.id}`,
-        name: teams.away.name || "Away",
-        score: awayScore,
+        id: `AS_${awayId}`,
+        name: awayName,
+        score: isLive ? (awayScore !== undefined ? Number(awayScore) : 0) : undefined,
       },
-      odds: generateFallbackOdds("football"),
-      startTime: f.date || new Date().toISOString(),
+      odds,
+      startTime,
       isLive,
       minute,
     };
   } catch (e) {
-    console.error("Error parsing AF fixture:", e);
+    console.error("Parse error:", e);
     return null;
   }
 }
 
-function parseOddsResponse(data: any): Map<string, { home: number; draw?: number; away: number }> {
-  const map = new Map<string, { home: number; draw?: number; away: number }>();
+function parseEventOdds(event: any, sport: string): { home: number; draw?: number; away: number } {
   try {
-    const responses = data.response || [];
-    for (const item of responses) {
-      const fixtureId = String(item.fixture?.id);
-      const bookmakers = item.bookmakers || [];
-      if (bookmakers.length === 0) continue;
-
-      const bm = bookmakers[0]; // First bookmaker
-      const matchWinner = bm.bets?.find((b: any) => b.name === "Match Winner" || b.id === 1);
-      if (!matchWinner?.values) continue;
-
-      const homeVal = matchWinner.values.find((v: any) => v.value === "Home");
-      const drawVal = matchWinner.values.find((v: any) => v.value === "Draw");
-      const awayVal = matchWinner.values.find((v: any) => v.value === "Away");
-
-      if (homeVal && awayVal) {
-        map.set(fixtureId, {
-          home: parseFloat(homeVal.odd) || 2.0,
-          draw: drawVal ? parseFloat(drawVal.odd) : undefined,
-          away: parseFloat(awayVal.odd) || 2.0,
-        });
+    if (event.odds) {
+      const h = event.odds["1"] || event.odds.home;
+      const d = event.odds["X"] || event.odds.draw;
+      const a = event.odds["2"] || event.odds.away;
+      if (h && a) {
+        return { home: parseFloat(h), draw: d ? parseFloat(d) : undefined, away: parseFloat(a) };
       }
     }
   } catch {}
-  return map;
+  return generateFallbackOdds(sport);
+}
+
+function getTodayDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function getTomorrowDate(): string {
+  const d = new Date(); d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function generateFallbackOdds(sport: string) {
@@ -247,12 +280,12 @@ serve(async (req) => {
     let allMatches: Match[] = [];
     let source = "mock-fallback";
 
-    // Primary: API-Football via RapidAPI
+    // Primary: AllSportsAPI via RapidAPI
     const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
     if (rapidApiKey) {
-      console.log("Using API-Football (RapidAPI)...");
-      allMatches = await fetchAPIFootball(rapidApiKey);
-      if (allMatches.length > 0) source = "API-Football";
+      console.log("Using AllSportsAPI (RapidAPI)...");
+      allMatches = await fetchAllSportsAPI(rapidApiKey);
+      if (allMatches.length > 0) source = "AllSportsAPI";
     }
 
     // Update live odds for existing DB matches
