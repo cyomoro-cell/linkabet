@@ -79,7 +79,7 @@ export function BetHistory() {
         {bets.map((bet) => {
           const status = statusConfig[bet.status] || statusConfig.pending;
           const StatusIcon = status.icon;
-          const matchData = bet.match_data;
+          const matchData = bet.match_data as any;
 
           return (
             <div
@@ -104,7 +104,7 @@ export function BetHistory() {
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Selection</p>
-                  <p className="font-medium capitalize">{bet.selections?.selection || 'Home'}</p>
+                  <p className="font-medium capitalize">{(bet.selections as any)?.selection || 'Home'}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Odds</p>
@@ -119,7 +119,7 @@ export function BetHistory() {
               <div className="mt-3 pt-3 border-t border-border flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">
                   {bet.status === 'cashout'
-                    ? `Cashed out: ${formatCurrency(bet.result_data?.cashout_value ?? 0, currency)}`
+                    ? `Cashed out: ${formatCurrency((bet.result_data as any)?.cashout_value ?? 0, currency)}`
                     : `Potential Win`}
                 </span>
                 <div className="flex items-center gap-2">

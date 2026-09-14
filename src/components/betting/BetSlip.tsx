@@ -80,7 +80,7 @@ export function BetSlip() {
         stake,
         total_odds: totalOdds,
         potential_win: potentialWin,
-      });
+      } as any);
 
       if (betError) throw betError;
 
