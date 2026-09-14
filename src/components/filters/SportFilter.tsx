@@ -20,6 +20,7 @@ const sportLabels: Record<string, string> = {
   rugby: 'Rugby',
   'american football': 'American Football',
   'ice hockey': 'Ice Hockey',
+  baseball: 'Baseball',
 };
 
 export function SportFilter({ sports, activeSport, onSportChange }: SportFilterProps) {

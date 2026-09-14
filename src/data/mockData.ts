@@ -99,4 +99,5 @@ export const sportIcons: Record<string, string> = {
   rugby: '🏉',
   'american football': '🏈',
   'ice hockey': '🏒',
+  baseball: '⚾',
 };
