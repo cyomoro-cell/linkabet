@@ -69,7 +69,7 @@ export function CashoutButton({ bet, onCashout }: CashoutButtonProps) {
         amount: cashoutValue,
         fee: 0,
         net_amount: cashoutValue,
-        description: `Cashout: ${bet.match_data?.homeTeam?.name || 'Match'} vs ${bet.match_data?.awayTeam?.name || 'Match'}`,
+        description: `Cashout: ${(bet.match_data as any)?.homeTeam?.name || 'Match'} vs ${(bet.match_data as any)?.awayTeam?.name || 'Match'}`,
       });
 
       if (txError) throw txError;
