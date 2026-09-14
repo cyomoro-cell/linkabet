@@ -28,6 +28,7 @@ const sportLabels: Record<string, string> = {
   rugby: 'Rugby',
   'american football': 'American Football',
   'ice hockey': 'Ice Hockey',
+  baseball: 'Baseball',
 };
 
 function SidebarContent({ matches, activeSport, activeLeague, onSportChange, onLeagueChange }: SportSidebarProps) {

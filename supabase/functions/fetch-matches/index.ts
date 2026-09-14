@@ -18,248 +18,137 @@ interface Match {
   minute?: number;
 }
 
-// ─── AllSportsAPI via RapidAPI (SofaScore data) ───
-const API_HOST = "allsportsapi2.p.rapidapi.com";
-const API_BASE = `https://${API_HOST}`;
+const API_BASE = "https://v3.football.api-sports.io";
 
-// Sports to fetch — using known endpoint patterns
-const SPORTS = [
-  { slug: "football", sport: "football" },
-  { slug: "basketball", sport: "basketball" },
-  { slug: "tennis", sport: "tennis" },
-  { slug: "cricket", sport: "cricket" },
-  { slug: "ice-hockey", sport: "ice hockey" },
-  { slug: "baseball", sport: "baseball" },
-  { slug: "american-football", sport: "american football" },
-  { slug: "mma", sport: "mma" },
-];
-
-async function fetchAllSportsAPI(rapidApiKey: string): Promise<Match[]> {
-  const headers = {
-    "X-RapidAPI-Key": rapidApiKey,
-    "X-RapidAPI-Host": API_HOST,
-  };
-
-  const allMatches: Match[] = [];
-  const existingIds = new Set<string>();
-
-  // SofaScore-style: /api/sport/scheduled-events/YYYY-MM-DD
-  // and /api/sport/events/live
-  const today = getTodayDate();
-
-  // Fetch sequentially to avoid rate limits (free tier)
-  for (const s of SPORTS) {
-    if (allMatches.length >= 60) break;
-
-    // Try scheduled events for today
-    const scheduled = await fetchEndpoint(
-      `${API_BASE}/api/${s.slug}/scheduled-events/${today}`,
-      `${s.sport} scheduled`, headers, s.sport, false
-    );
-    for (const m of scheduled) {
-      if (!existingIds.has(m.id)) { allMatches.push(m); existingIds.add(m.id); }
-    }
-
-    // Small delay to avoid rate limit
-    await delay(200);
-
-    // Try live events
-    const live = await fetchEndpoint(
-      `${API_BASE}/api/${s.slug}/events/live`,
-      `${s.sport} live`, headers, s.sport, true
-    );
-    for (const m of live) {
-      if (!existingIds.has(m.id)) { allMatches.push(m); existingIds.add(m.id); }
-    }
-
-    await delay(200);
-  }
-
-  // If still low, try tomorrow for football
-  if (allMatches.length < 20) {
-    const tomorrow = getTomorrowDate();
-    const tomorrowMatches = await fetchEndpoint(
-      `${API_BASE}/api/football/scheduled-events/${tomorrow}`,
-      "football tomorrow", headers, "football", false
-    );
-    for (const m of tomorrowMatches) {
-      if (!existingIds.has(m.id)) { allMatches.push(m); existingIds.add(m.id); }
-    }
-  }
-
-  console.log(`AllSportsAPI total: ${allMatches.length} matches`);
-  return allMatches;
+function dateStr(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().split("T")[0];
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function fetchEndpoint(
-  url: string, label: string, headers: Record<string, string>,
-  sport: string, isLive: boolean
-): Promise<Match[]> {
-  const matches: Match[] = [];
+// Fetch real odds for a date, mapped by fixture id
+async function fetchOddsMap(apiKey: string, date: string): Promise<Map<number, { home: number; draw: number; away: number }>> {
+  const map = new Map();
   try {
-    console.log(`Fetching ${label}...`);
-    const res = await fetch(url, { headers });
+    const res = await fetch(`${API_BASE}/odds?date=${date}&bookmaker=8`, {
+      headers: { "x-apisports-key": apiKey },
+    });
+    if (!res.ok) {
+      console.warn(`odds ${date}: ${res.status}`);
+      return map;
+    }
+    const data = await res.json();
+    for (const item of data.response || []) {
+      const bet = item.bookmakers?.[0]?.bets?.find((b: any) => b.name === "Match Winner");
+      if (!bet) continue;
+      const home = bet.values?.find((v: any) => v.value === "Home")?.odd;
+      const draw = bet.values?.find((v: any) => v.value === "Draw")?.odd;
+      const away = bet.values?.find((v: any) => v.value === "Away")?.odd;
+      if (home && away) {
+        map.set(item.fixture?.id, {
+          home: parseFloat(home),
+          away: parseFloat(away),
+          ...(draw ? { draw: parseFloat(draw) } : {}),
+        });
+      }
+    }
+  } catch (e) {
+    console.error("odds fetch error:", e);
+  }
+  return map;
+}
+
+async function fetchFixtures(apiKey: string, query: string): Promise<any[]> {
+  try {
+    const res = await fetch(`${API_BASE}/fixtures?${query}`, {
+      headers: { "x-apisports-key": apiKey },
+    });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.warn(`${label}: ${res.status} - ${body.substring(0, 100)}`);
+      console.warn(`fixtures ${query}: ${res.status} - ${body.substring(0, 150)}`);
       return [];
     }
     const data = await res.json();
-    
-    // AllSportsAPI returns { events: [...] }
-    const events = data.events || [];
-    if (!Array.isArray(events)) {
-      console.log(`${label}: no events array, keys: ${Object.keys(data).join(",")}`);
-      return [];
+    if (data.errors && Object.keys(data.errors).length > 0) {
+      console.warn(`fixtures ${query} errors:`, JSON.stringify(data.errors));
     }
-    
-    console.log(`${label}: ${events.length} events`);
-
-    for (const event of events.slice(0, 25)) {
-      const parsed = parseEvent(event, sport, isLive);
-      if (parsed) matches.push(parsed);
-    }
+    return data.response || [];
   } catch (e) {
-    console.error(`${label} error:`, e);
+    console.error(`fixtures ${query} error:`, e);
+    return [];
   }
-  return matches;
 }
 
-function parseEvent(event: any, sport: string, fromLive: boolean): Match | null {
+const LIVE_STATUSES = ["1H", "HT", "2H", "ET", "BT", "P", "INT"];
+const FINISHED_STATUSES = ["FT", "AET", "PEN", "PST", "CANC", "ABD", "AWD", "WO"];
+
+function parseFixture(f: any, oddsMap: Map<number, { home: number; draw: number; away: number }>): Match | null {
   try {
-    // SofaScore/AllSportsAPI event structure
-    const homeName = event.homeTeam?.name || event.homeTeam?.shortName || "";
-    const awayName = event.awayTeam?.name || event.awayTeam?.shortName || "";
-    if (!homeName || !awayName) return null;
+    const fixture = f.fixture;
+    const league = f.league;
+    const teams = f.teams;
+    if (!fixture?.id || !teams?.home?.name || !teams?.away?.name) return null;
 
-    const homeId = event.homeTeam?.id || "";
-    const awayId = event.awayTeam?.id || "";
+    const status = fixture.status?.short || "NS";
+    if (FINISHED_STATUSES.includes(status)) return null;
 
-    // Status
-    const statusCode = event.status?.code;
-    const statusType = event.status?.type || "";
-    // code: 0=not started, 6=1st half, 7=2nd half, 31=HT, 100=ended, etc.
-    const isFinished = statusType === "finished" || statusCode === 100;
-    if (isFinished) return null;
-
-    const isLive = fromLive || statusType === "inprogress" || [6, 7, 31, 41, 42].includes(statusCode);
-
-    // Scores
-    const homeScore = event.homeScore?.current ?? event.homeScore?.display;
-    const awayScore = event.awayScore?.current ?? event.awayScore?.display;
-
-    // Minute
-    let minute: number | undefined;
-    if (isLive) {
-      // SofaScore uses statusTime or we can calculate from startTimestamp
-      if (event.statusTime?.played) {
-        minute = Math.floor(event.statusTime.played / 60);
-      } else if (event.time?.currentPeriodStartTimestamp) {
-        const elapsed = Math.floor((Date.now() / 1000 - event.time.currentPeriodStartTimestamp));
-        minute = Math.max(0, Math.floor(elapsed / 60));
-      } else if (event.startTimestamp) {
-        const elapsed = Math.floor(Date.now() / 1000 - event.startTimestamp);
-        minute = Math.min(90, Math.max(0, Math.floor(elapsed / 60)));
-      }
-    }
-
-    // Tournament / League
-    const league = event.tournament?.name || event.tournament?.uniqueTournament?.name || "Unknown League";
-
-    // Start time
-    const startTime = event.startTimestamp
-      ? new Date(event.startTimestamp * 1000).toISOString()
-      : new Date().toISOString();
+    const isLive = LIVE_STATUSES.includes(status);
+    const realOdds = oddsMap.get(fixture.id);
 
     return {
-      id: `AS_${event.id}`,
-      sport,
-      league,
+      id: `AF_${fixture.id}`,
+      sport: "football",
+      league: league?.name || "Unknown League",
       homeTeam: {
-        id: `AS_${homeId}`,
-        name: homeName,
-        score: isLive ? (homeScore !== undefined ? Number(homeScore) : 0) : undefined,
+        id: `AF_${teams.home.id}`,
+        name: teams.home.name,
+        score: isLive ? (f.goals?.home ?? 0) : undefined,
       },
       awayTeam: {
-        id: `AS_${awayId}`,
-        name: awayName,
-        score: isLive ? (awayScore !== undefined ? Number(awayScore) : 0) : undefined,
+        id: `AF_${teams.away.id}`,
+        name: teams.away.name,
+        score: isLive ? (f.goals?.away ?? 0) : undefined,
       },
-      odds: generateFallbackOdds(sport),
-      startTime,
+      odds: realOdds || generateFallbackOdds(),
+      startTime: fixture.date || new Date().toISOString(),
       isLive,
-      minute,
+      minute: isLive ? (fixture.status?.elapsed ?? undefined) : undefined,
     };
   } catch (e) {
-    console.error("Parse error:", e);
+    console.error("parse error:", e);
     return null;
   }
 }
 
-function getTodayDate(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function getTomorrowDate(): string {
-  const d = new Date(); d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function generateFallbackOdds(sport: string) {
-  if (sport === "football" || sport === "soccer") {
-    return { home: parseFloat((1.5 + Math.random() * 2).toFixed(2)), draw: parseFloat((2.5 + Math.random() * 1.5).toFixed(2)), away: parseFloat((1.8 + Math.random() * 2.2).toFixed(2)) };
-  }
-  return { home: parseFloat((1.6 + Math.random() * 1.5).toFixed(2)), away: parseFloat((2.0 + Math.random() * 1.8).toFixed(2)) };
+function generateFallbackOdds() {
+  return {
+    home: parseFloat((1.5 + Math.random() * 2).toFixed(2)),
+    draw: parseFloat((2.5 + Math.random() * 1.5).toFixed(2)),
+    away: parseFloat((1.8 + Math.random() * 2.2).toFixed(2)),
+  };
 }
 
 function generateMockMatches(count: number): Match[] {
-  const sports = [
-    { name: "football", leagues: ["Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1", "Champions League"] },
-    { name: "basketball", leagues: ["NBA", "EuroLeague"] },
-    { name: "tennis", leagues: ["ATP Tour", "WTA Tour"] },
-    { name: "ice hockey", leagues: ["NHL", "KHL"] },
-    { name: "mma", leagues: ["UFC", "Bellator"] },
-    { name: "baseball", leagues: ["MLB", "NPB"] },
-  ];
-  const teams: Record<string, string[]> = {
-    football: ["Manchester City", "Liverpool", "Real Madrid", "Barcelona", "Bayern Munich", "PSG", "Juventus", "AC Milan", "Inter Milan", "Chelsea"],
-    basketball: ["Lakers", "Warriors", "Celtics", "Bucks", "Heat", "Suns", "Nuggets", "76ers"],
-    tennis: ["Djokovic", "Alcaraz", "Sinner", "Medvedev", "Zverev", "Fritz"],
-    "ice hockey": ["Bruins", "Rangers", "Oilers", "Panthers", "Avalanche", "Stars"],
-    mma: ["Fighter A", "Fighter B", "Champion X", "Contender Y"],
-    baseball: ["Yankees", "Dodgers", "Braves", "Astros", "Mets", "Phillies"],
-  };
+  const leagues = ["Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1", "Champions League"];
+  const teams = ["Manchester City", "Liverpool", "Real Madrid", "Barcelona", "Bayern Munich", "PSG", "Juventus", "AC Milan", "Inter Milan", "Chelsea"];
   const matches: Match[] = [];
   for (let i = 0; i < count; i++) {
-    const sport = sports[Math.floor(Math.random() * sports.length)];
-    const league = sport.leagues[Math.floor(Math.random() * sport.leagues.length)];
-    const t = teams[sport.name] || ["Team A", "Team B"];
-    const hi = Math.floor(Math.random() * t.length);
-    let ai = Math.floor(Math.random() * t.length);
-    while (ai === hi && t.length > 1) ai = Math.floor(Math.random() * t.length);
+    const league = leagues[Math.floor(Math.random() * leagues.length)];
+    const hi = Math.floor(Math.random() * teams.length);
+    let ai = Math.floor(Math.random() * teams.length);
+    while (ai === hi) ai = Math.floor(Math.random() * teams.length);
     matches.push({
-      id: `MOCK_${sport.name}_${league.replace(/\s/g, "")}_${i}_${Date.now()}`,
-      sport: sport.name, league,
-      homeTeam: { id: `home_${i}`, name: t[hi] },
-      awayTeam: { id: `away_${i}`, name: t[ai] },
-      odds: generateFallbackOdds(sport.name),
-      startTime: new Date(Date.now() + (15 + Math.random() * 168) * 60 * 1000).toISOString(),
+      id: `MOCK_${league.replace(/\s/g, "")}_${i}_${Date.now()}`,
+      sport: "football",
+      league,
+      homeTeam: { id: `home_${i}`, name: teams[hi] },
+      awayTeam: { id: `away_${i}`, name: teams[ai] },
+      odds: generateFallbackOdds(),
+      startTime: new Date(Date.now() + (15 + Math.random() * 720) * 60 * 1000).toISOString(),
       isLive: false,
     });
   }
   return matches;
-}
-
-function shiftOdds(odds: { home: number; draw?: number; away: number }) {
-  return {
-    home: parseFloat(Math.max(1.01, odds.home + (Math.random() - 0.5) * 0.08).toFixed(2)),
-    away: parseFloat(Math.max(1.01, odds.away + (Math.random() - 0.5) * 0.08).toFixed(2)),
-    ...(odds.draw !== undefined ? { draw: parseFloat(Math.max(1.01, odds.draw + (Math.random() - 0.5) * 0.08).toFixed(2)) } : {}),
-  };
 }
 
 serve(async (req) => {
@@ -267,57 +156,83 @@ serve(async (req) => {
 
   try {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const apiKey = Deno.env.get("API_FOOTBALL_KEY");
     let allMatches: Match[] = [];
     let source = "mock-fallback";
 
-    const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
-    if (rapidApiKey) {
-      console.log("Using AllSportsAPI (RapidAPI)...");
-      allMatches = await fetchAllSportsAPI(rapidApiKey);
-      if (allMatches.length > 0) source = "AllSportsAPI";
-    }
+    if (apiKey) {
+      console.log("Using API-Football (api-sports.io)...");
+      const today = dateStr(0);
+      const tomorrow = dateStr(1);
 
-    // Update live odds for existing DB matches
-    const { data: existingMatches } = await supabase.from("matches").select("id, odds, is_live, minute").eq("is_live", true);
-    if (existingMatches?.length) {
-      for (const existing of existingMatches) {
-        if (!allMatches.find(m => m.id === existing.id)) {
-          await supabase.from("matches").update({ odds: shiftOdds(existing.odds as any), minute: (existing.minute || 0) + 1, updated_at: new Date().toISOString() }).eq("id", existing.id);
+      // Fetch in parallel: live, today, tomorrow, odds
+      const [live, todayFixtures, tomorrowFixtures, oddsMap] = await Promise.all([
+        fetchFixtures(apiKey, "live=all"),
+        fetchFixtures(apiKey, `date=${today}`),
+        fetchFixtures(apiKey, `date=${tomorrow}`),
+        fetchOddsMap(apiKey, today),
+      ]);
+
+      console.log(`live: ${live.length}, today: ${todayFixtures.length}, tomorrow: ${tomorrowFixtures.length}, odds: ${oddsMap.size}`);
+
+      const seen = new Set<string>();
+      for (const f of [...live, ...todayFixtures, ...tomorrowFixtures]) {
+        const m = parseFixture(f, oddsMap);
+        if (m && !seen.has(m.id)) {
+          seen.add(m.id);
+          allMatches.push(m);
         }
+        if (allMatches.length >= 100) break;
       }
+
+      if (allMatches.length > 0) source = "API-Football";
+    } else {
+      console.warn("API_FOOTBALL_KEY not set");
     }
 
+    // Fill with mocks if API returned little
     if (allMatches.length < 15) {
       const mockCount = 15 - allMatches.length;
       console.log(`Adding ${mockCount} mock matches`);
       allMatches.push(...generateMockMatches(mockCount));
     }
 
+    // Sort: live first, then by start time
     allMatches.sort((a, b) => {
       if (a.isLive && !b.isLive) return -1;
       if (!a.isLive && b.isLive) return 1;
       return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
     });
 
-    const uniqueMap = new Map<string, Match>();
-    for (const m of allMatches) uniqueMap.set(m.id, m);
-    const uniqueMatches = Array.from(uniqueMap.values()).filter(m => {
-      if (!m.isLive && new Date(m.startTime).getTime() < Date.now()) return false;
-      if (m.isLive && m.minute && m.minute > 90) return false;
+    // Filter ended/stale matches
+    const now = Date.now();
+    const uniqueMatches = allMatches.filter((m) => {
+      if (!m.isLive && new Date(m.startTime).getTime() < now) return false;
+      if (m.isLive && m.minute && m.minute > 120) return false;
       return true;
     });
 
-    const dbRows = uniqueMatches.map(m => ({
-      id: m.id, sport: m.sport, league: m.league, home_team: m.homeTeam, away_team: m.awayTeam,
-      odds: m.odds, start_time: m.startTime, is_live: m.isLive, minute: m.minute || null, updated_at: new Date().toISOString(),
+    // Upsert to DB
+    const dbRows = uniqueMatches.map((m) => ({
+      id: m.id,
+      sport: m.sport,
+      league: m.league,
+      home_team: m.homeTeam,
+      away_team: m.awayTeam,
+      odds: m.odds,
+      start_time: m.startTime,
+      is_live: m.isLive,
+      minute: m.minute || null,
+      updated_at: new Date().toISOString(),
     }));
 
     const { error: upsertError } = await supabase.from("matches").upsert(dbRows, { onConflict: "id" });
     if (upsertError) console.error("Upsert error:", upsertError);
     else console.log(`Upserted ${dbRows.length} matches (source: ${source})`);
 
+    // Cleanup: remove stale matches
     await supabase.from("matches").delete().eq("is_live", false).lt("start_time", new Date().toISOString());
-    await supabase.from("matches").delete().eq("is_live", true).gt("minute", 90);
+    await supabase.from("matches").delete().eq("is_live", true).gt("minute", 120);
 
     return new Response(JSON.stringify({ matches: uniqueMatches, count: uniqueMatches.length, source }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

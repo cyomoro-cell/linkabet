@@ -25,7 +25,7 @@ export interface Match {
   minute?: number;
 }
 
-export type Sport = 'football' | 'soccer' | 'basketball' | 'tennis' | 'cricket' | 'esports' | 'mma' | 'rugby' | 'american football' | 'ice hockey';
+export type Sport = 'football' | 'soccer' | 'basketball' | 'tennis' | 'cricket' | 'esports' | 'mma' | 'rugby' | 'american football' | 'ice hockey' | 'baseball';
 
 export interface BetSelection {
   matchId: string;

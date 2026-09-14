@@ -196,7 +196,7 @@ function UsersTab({ isMaster }: { isMaster: boolean }) {
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     const { error } = await db.from('user_roles')
-      .update({ role: newRole })
+      .update({ role: newRole as 'admin' | 'master' | 'user' })
       .eq('user_id', userId);
     if (error) {
       toast({ title: 'Failed', description: error.message, variant: 'destructive' });
