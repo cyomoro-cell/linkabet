@@ -18,15 +18,127 @@ interface Match {
   minute?: number;
 }
 
-const API_BASE = "https://v3.football.api-sports.io";
-
 function dateStr(offsetDays = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
   return d.toISOString().split("T")[0];
 }
 
-// Fetch real odds for a date, mapped by fixture id
+// ---------------------------------------------------------------------------
+// SportMonks API v3 (primary)
+// ---------------------------------------------------------------------------
+const SM_BASE = "https://api.sportmonks.com/v3/football";
+
+async function smFetch(apiKey: string, path: string): Promise<any[]> {
+  try {
+    const sep = path.includes("?") ? "&" : "?";
+    const res = await fetch(`${SM_BASE}${path}${sep}api_token=${apiKey}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.warn(`SportMonks ${path}: ${res.status} - ${body.substring(0, 200)}`);
+      return [];
+    }
+    const data = await res.json();
+    return data.data || [];
+  } catch (e) {
+    console.error(`SportMonks ${path} error:`, e);
+    return [];
+  }
+}
+
+function smCurrentScore(fixture: any, side: "home" | "away"): number | undefined {
+  const scores = fixture.scores || [];
+  for (const s of scores) {
+    if (s.description === "CURRENT" && s.score?.participant === side) {
+      return s.score?.goals ?? 0;
+    }
+  }
+  return undefined;
+}
+
+function smOdds(fixture: any): { home: number; draw: number; away: number } | null {
+  const odds = fixture.odds || [];
+  // Market id 1 = Fulltime Result (1X2)
+  const home = odds.find((o: any) => o.market_id === 1 && o.label === "1")?.value;
+  const draw = odds.find((o: any) => o.market_id === 1 && o.label === "X")?.value;
+  const away = odds.find((o: any) => o.market_id === 1 && o.label === "2")?.value;
+  if (home && away) {
+    return { home: parseFloat(home), away: parseFloat(away), ...(draw ? { draw: parseFloat(draw) } : {}) };
+  }
+  return null;
+}
+
+const SM_LIVE_STATES = [2, 3]; // INPLAY_1ST_HALF=2, INPLAY_2ND_HALF=3 ... varies; use name matching below
+
+function parseSmFixture(f: any): Match | null {
+  try {
+    const participants = f.participants || [];
+    const home = participants.find((p: any) => p.meta?.location === "home");
+    const away = participants.find((p: any) => p.meta?.location === "away");
+    if (!f.id || !home?.name || !away?.name) return null;
+
+    const stateName = (f.state?.name || f.state?.state || "").toUpperCase();
+    const finished = ["FT", "AET", "POSTP", "CANCL", "ABANDONED", "AWARDED", "WO", "DELETED", "EXTRA_TIME_BREAK"].some((s) => stateName.includes(s));
+    if (finished) return null;
+
+    const isLive = ["LIVE", "HT", "1ST", "2ND", "INPLAY", "ET", "BREAK", "PEN"].some((s) => stateName.includes(s));
+    const startingAt = f.starting_at || new Date().toISOString();
+
+    return {
+      id: `SM_${f.id}`,
+      sport: "football",
+      league: f.league?.name || "Unknown League",
+      homeTeam: {
+        id: `SM_${home.id}`,
+        name: home.name,
+        score: isLive ? (smCurrentScore(f, "home") ?? 0) : undefined,
+      },
+      awayTeam: {
+        id: `SM_${away.id}`,
+        name: away.name,
+        score: isLive ? (smCurrentScore(f, "away") ?? 0) : undefined,
+      },
+      odds: smOdds(f) || generateFallbackOdds(),
+      startTime: startingAt.includes("T") ? startingAt : startingAt.replace(" ", "T") + "Z",
+      isLive,
+      minute: isLive ? undefined : undefined,
+    };
+  } catch (e) {
+    console.error("SportMonks parse error:", e);
+    return null;
+  }
+}
+
+async function fetchSportMonks(apiKey: string): Promise<Match[]> {
+  const today = dateStr(0);
+  const tomorrow = dateStr(1);
+
+  const [live, todayFix, tomorrowFix] = await Promise.all([
+    smFetch(apiKey, "/livescores/inplay?include=participants;league;scores;state"),
+    smFetch(apiKey, `/fixtures/date/${today}?include=participants;league;odds;state`),
+    smFetch(apiKey, `/fixtures/date/${tomorrow}?include=participants;league;odds;state`),
+  ]);
+
+  console.log(`SportMonks live: ${live.length}, today: ${todayFix.length}, tomorrow: ${tomorrowFix.length}`);
+
+  const seen = new Set<string>();
+  const out: Match[] = [];
+  for (const f of [...live, ...todayFix, ...tomorrowFix]) {
+    const m = parseSmFixture(f);
+    if (m && !seen.has(m.id)) {
+      seen.add(m.id);
+      out.push(m);
+    }
+    if (out.length >= 100) break;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// API-Football (fallback)
+// ---------------------------------------------------------------------------
+const API_BASE = "https://v3.football.api-sports.io";
+
 async function fetchOddsMap(apiKey: string, date: string): Promise<Map<number, { home: number; draw: number; away: number }>> {
   const map = new Map();
   try {
@@ -120,6 +232,35 @@ function parseFixture(f: any, oddsMap: Map<number, { home: number; draw: number;
   }
 }
 
+async function fetchApiFootball(apiKey: string): Promise<Match[]> {
+  const today = dateStr(0);
+  const tomorrow = dateStr(1);
+
+  const [live, todayFixtures, tomorrowFixtures, oddsMap] = await Promise.all([
+    fetchFixtures(apiKey, "live=all"),
+    fetchFixtures(apiKey, `date=${today}`),
+    fetchFixtures(apiKey, `date=${tomorrow}`),
+    fetchOddsMap(apiKey, today),
+  ]);
+
+  console.log(`API-Football live: ${live.length}, today: ${todayFixtures.length}, tomorrow: ${tomorrowFixtures.length}, odds: ${oddsMap.size}`);
+
+  const seen = new Set<string>();
+  const out: Match[] = [];
+  for (const f of [...live, ...todayFixtures, ...tomorrowFixtures]) {
+    const m = parseFixture(f, oddsMap);
+    if (m && !seen.has(m.id)) {
+      seen.add(m.id);
+      out.push(m);
+    }
+    if (out.length >= 100) break;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Mocks & helpers
+// ---------------------------------------------------------------------------
 function generateFallbackOdds() {
   return {
     home: parseFloat((1.5 + Math.random() * 2).toFixed(2)),
@@ -156,41 +297,28 @@ serve(async (req) => {
 
   try {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const apiKey = Deno.env.get("API_FOOTBALL_KEY");
+    const smKey = Deno.env.get("SPORTMONKS_API_KEY");
+    const afKey = Deno.env.get("API_FOOTBALL_KEY");
     let allMatches: Match[] = [];
     let source = "mock-fallback";
 
-    if (apiKey) {
-      console.log("Using API-Football (api-sports.io)...");
-      const today = dateStr(0);
-      const tomorrow = dateStr(1);
-
-      // Fetch in parallel: live, today, tomorrow, odds
-      const [live, todayFixtures, tomorrowFixtures, oddsMap] = await Promise.all([
-        fetchFixtures(apiKey, "live=all"),
-        fetchFixtures(apiKey, `date=${today}`),
-        fetchFixtures(apiKey, `date=${tomorrow}`),
-        fetchOddsMap(apiKey, today),
-      ]);
-
-      console.log(`live: ${live.length}, today: ${todayFixtures.length}, tomorrow: ${tomorrowFixtures.length}, odds: ${oddsMap.size}`);
-
-      const seen = new Set<string>();
-      for (const f of [...live, ...todayFixtures, ...tomorrowFixtures]) {
-        const m = parseFixture(f, oddsMap);
-        if (m && !seen.has(m.id)) {
-          seen.add(m.id);
-          allMatches.push(m);
-        }
-        if (allMatches.length >= 100) break;
-      }
-
-      if (allMatches.length > 0) source = "API-Football";
+    // Primary: SportMonks
+    if (smKey) {
+      console.log("Fetching from SportMonks...");
+      allMatches = await fetchSportMonks(smKey);
+      if (allMatches.length > 0) source = "SportMonks";
     } else {
-      console.warn("API_FOOTBALL_KEY not set");
+      console.warn("SPORTMONKS_API_KEY not set");
     }
 
-    // Fill with mocks if API returned little
+    // Fallback: API-Football
+    if (allMatches.length === 0 && afKey) {
+      console.log("SportMonks empty, trying API-Football...");
+      allMatches = await fetchApiFootball(afKey);
+      if (allMatches.length > 0) source = "API-Football";
+    }
+
+    // Fill with mocks if real APIs returned little
     if (allMatches.length < 15) {
       const mockCount = 15 - allMatches.length;
       console.log(`Adding ${mockCount} mock matches`);
