@@ -9,12 +9,14 @@ interface DBMatch {
   id: string;
   sport: string;
   league: string;
+  country?: string;
   home_team: { id: string; name: string; score?: number };
   away_team: { id: string; name: string; score?: number };
   odds: { home: number; draw?: number; away: number };
   start_time: string;
   is_live: boolean;
   minute: number | null;
+  status_code?: string | null;
   updated_at: string;
 }
 
@@ -23,12 +25,14 @@ function dbToMatch(row: DBMatch): Match {
     id: row.id,
     sport: row.sport as Sport,
     league: row.league,
+    country: row.country,
     homeTeam: row.home_team,
     awayTeam: row.away_team,
     odds: row.odds,
     startTime: new Date(row.start_time),
     isLive: row.is_live,
     minute: row.minute ?? undefined,
+    statusCode: row.status_code ?? undefined,
   };
 }
 

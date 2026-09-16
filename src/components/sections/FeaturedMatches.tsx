@@ -1,5 +1,5 @@
 import { Match, Sport } from '@/types';
-import { MatchCard } from '@/components/matches/MatchCard';
+import { LeagueMatchList } from '@/components/matches/LeagueMatchList';
 import { SportFilter } from '@/components/filters/SportFilter';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -39,13 +39,8 @@ export function FeaturedMatches({ matches }: FeaturedMatchesProps) {
         </div>
 
         {/* Match Grid */}
-        <motion.div 
-          layout
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-        >
-          {filteredMatches.map((match) => (
-            <MatchCard key={match.id} match={match} />
-          ))}
+        <motion.div layout>
+          <LeagueMatchList matches={filteredMatches} />
         </motion.div>
       </div>
     </section>

@@ -6,12 +6,14 @@ interface APIMatch {
   id: string;
   sport: string;
   league: string;
+  country?: string;
   homeTeam: { id: string; name: string; score?: number };
   awayTeam: { id: string; name: string; score?: number };
   odds: { home: number; draw?: number; away: number };
   startTime: string;
   isLive: boolean;
   minute?: number;
+  statusCode?: string;
 }
 
 function mapAPIMatch(m: APIMatch): Match {
@@ -19,12 +21,14 @@ function mapAPIMatch(m: APIMatch): Match {
     id: m.id,
     sport: m.sport as Sport,
     league: m.league,
+    country: m.country,
     homeTeam: m.homeTeam,
     awayTeam: m.awayTeam,
     odds: m.odds,
     startTime: new Date(m.startTime),
     isLive: m.isLive,
     minute: m.minute,
+    statusCode: m.statusCode,
   };
 }
 

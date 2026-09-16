@@ -1,5 +1,5 @@
 import { Match } from '@/types';
-import { MatchCard } from '@/components/matches/MatchCard';
+import { LeagueMatchList } from '@/components/matches/LeagueMatchList';
 import { motion } from 'framer-motion';
 import { Zap, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -40,12 +40,8 @@ export function LiveMatches({ matches }: LiveMatchesProps) {
         </div>
 
         {/* Live Match Grid */}
-        <motion.div 
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
-        >
-          {liveMatches.map((match) => (
-            <MatchCard key={match.id} match={match} />
-          ))}
+        <motion.div>
+          <LeagueMatchList matches={liveMatches} />
         </motion.div>
       </div>
     </section>
