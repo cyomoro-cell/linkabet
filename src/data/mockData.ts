@@ -1,69 +1,100 @@
-import { Match, Promotion } from '@/types';
+import { Match, Promotion, Sport, SportsFeed } from '@/types';
 
-export const mockMatches: Match[] = [
-  {
-    id: '1',
-    sport: 'football',
-    league: 'Premier League',
-    homeTeam: { id: 'mci', name: 'Manchester City', score: 2 },
-    awayTeam: { id: 'liv', name: 'Liverpool', score: 1 },
-    odds: { home: 1.85, draw: 3.50, away: 4.20 },
-    startTime: new Date(),
-    isLive: true,
-    minute: 67,
-  },
-  {
-    id: '2',
-    sport: 'football',
-    league: 'La Liga',
-    homeTeam: { id: 'rma', name: 'Real Madrid' },
-    awayTeam: { id: 'bar', name: 'Barcelona' },
-    odds: { home: 2.10, draw: 3.30, away: 3.40 },
-    startTime: new Date(Date.now() + 3600000),
-    isLive: false,
-  },
-  {
-    id: '3',
-    sport: 'basketball',
-    league: 'NBA',
-    homeTeam: { id: 'lal', name: 'LA Lakers', score: 98 },
-    awayTeam: { id: 'gsw', name: 'Golden State', score: 102 },
-    odds: { home: 1.95, away: 1.90 },
-    startTime: new Date(),
-    isLive: true,
-    minute: 42,
-  },
-  {
-    id: '4',
-    sport: 'tennis',
-    league: 'ATP Masters',
-    homeTeam: { id: 'djok', name: 'N. Djokovic' },
-    awayTeam: { id: 'ala', name: 'C. Alcaraz' },
-    odds: { home: 2.20, away: 1.75 },
-    startTime: new Date(Date.now() + 7200000),
-    isLive: false,
-  },
-  {
-    id: '5',
-    sport: 'football',
-    league: 'Champions League',
-    homeTeam: { id: 'bay', name: 'Bayern Munich' },
-    awayTeam: { id: 'psg', name: 'Paris SG' },
-    odds: { home: 1.70, draw: 3.80, away: 4.80 },
-    startTime: new Date(Date.now() + 86400000),
-    isLive: false,
-  },
-  {
-    id: '6',
-    sport: 'esports',
-    league: 'LoL Worlds',
-    homeTeam: { id: 't1', name: 'T1' },
-    awayTeam: { id: 'geng', name: 'Gen.G' },
-    odds: { home: 1.65, away: 2.30 },
-    startTime: new Date(Date.now() + 10800000),
-    isLive: false,
-  },
-];
+const nowSeconds = Math.floor(Date.now() / 1000);
+
+// Mock fixtures intentionally mirror the supplied Sctns[] → Ts → Evs[] feed.
+export const mockSportsFeed: SportsFeed = {
+  Ts: nowSeconds,
+  Nav: { Hn: true, Hp: false },
+  Sctns: [
+    {
+      Id: 's-25695',
+      Tp: 1,
+      Ts: {
+        Sid: '25695',
+        Snm: 'LaLiga',
+        Scd: 'laliga',
+        Cnm: 'Spain',
+        Ccd: 'spain',
+        Evs: [
+          {
+            Eid: '1810672',
+            T1: [{ ID: '4253', Nm: 'Rayo Vallecano', Abr: 'RAY' }],
+            T2: [{ ID: '12635', Nm: 'Espanyol', Abr: 'ESY' }],
+            Eps: 'NS',
+            Est: nowSeconds + 3600,
+            Spid: 1,
+          },
+          {
+            Eid: '1810658',
+            T1: [{ ID: '8633', Nm: 'Real Sociedad', Abr: 'RSO' }],
+            T2: [{ ID: '9906', Nm: 'Villarreal', Abr: 'VIL' }],
+            Eps: 'NS',
+            Est: nowSeconds + 7200,
+            Spid: 1,
+          },
+        ],
+      },
+    },
+    {
+      Id: 's-17',
+      Tp: 1,
+      Ts: {
+        Sid: '17',
+        Snm: 'Premier League',
+        Scd: 'premier-league',
+        Cnm: 'England',
+        Ccd: 'england',
+        Evs: [
+          {
+            Eid: 'mock-live-1',
+            T1: [{ ID: 'mci', Nm: 'Manchester City', Abr: 'MCI' }],
+            T2: [{ ID: 'liv', Nm: 'Liverpool', Abr: 'LIV' }],
+            Eps: '67',
+            Est: nowSeconds - 4020,
+            Spid: 1,
+            Tr1: '2',
+            Tr2: '1',
+          },
+        ],
+      },
+    },
+  ],
+};
+
+const scoreFromFeed = (score?: string) => {
+  if (score === undefined) return undefined;
+  const value = Number(score);
+  return Number.isFinite(value) ? value : undefined;
+};
+
+export function sportsFeedToMatches(feed: SportsFeed): Match[] {
+  return feed.Sctns.flatMap(({ Ts: league }) =>
+    league.Evs.flatMap((event) => {
+      const home = event.T1[0];
+      const away = event.T2[0];
+      if (!home || !away) return [];
+
+      const isUpcoming = event.Eps === 'NS';
+      const minute = !isUpcoming ? Number.parseInt(event.Eps, 10) : undefined;
+      return [{
+        id: event.Eid,
+        sport: 'football' as Sport,
+        league: league.Snm,
+        country: league.Cnm,
+        homeTeam: { id: home.ID, name: home.Nm, score: scoreFromFeed(event.Tr1) },
+        awayTeam: { id: away.ID, name: away.Nm, score: scoreFromFeed(event.Tr2) },
+        odds: { home: 1.85, draw: 3.4, away: 4.1 },
+        startTime: new Date(event.Est * 1000),
+        isLive: !isUpcoming,
+        minute: Number.isFinite(minute) ? minute : undefined,
+        statusCode: event.Eps,
+      }];
+    }),
+  );
+}
+
+export const mockMatches: Match[] = sportsFeedToMatches(mockSportsFeed);
 
 export const mockPromotions: Promotion[] = [
   {

@@ -17,12 +17,53 @@ export interface Match {
   id: string;
   sport: Sport;
   league: string;
+  country?: string;
   homeTeam: Team;
   awayTeam: Team;
   odds: Odds;
   startTime: Date;
   isLive: boolean;
   minute?: number;
+  statusCode?: string;
+}
+
+export interface SportsFeedTeam {
+  ID: string;
+  Nm: string;
+  Img?: string;
+  Abr?: string;
+}
+
+export interface SportsFeedEvent {
+  Eid: string;
+  T1: SportsFeedTeam[];
+  T2: SportsFeedTeam[];
+  Eps: string;
+  Est: number;
+  Spid?: number;
+  Tr1?: string;
+  Tr2?: string;
+}
+
+export interface SportsFeedLeague {
+  Sid: string;
+  Snm: string;
+  Cnm: string;
+  Scd?: string;
+  Ccd?: string;
+  Evs: SportsFeedEvent[];
+}
+
+export interface SportsFeedSection {
+  Id: string;
+  Tp: number;
+  Ts: SportsFeedLeague;
+}
+
+export interface SportsFeed {
+  Ts: number;
+  Nav: { Hn: boolean; Hp: boolean };
+  Sctns: SportsFeedSection[];
 }
 
 export type Sport = 'football' | 'soccer' | 'basketball' | 'tennis' | 'cricket' | 'esports' | 'mma' | 'rugby' | 'american football' | 'ice hockey' | 'baseball';
