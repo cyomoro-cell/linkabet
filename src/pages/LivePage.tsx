@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { MatchCard } from '@/components/matches/MatchCard';
+import { LeagueMatchList } from '@/components/matches/LeagueMatchList';
 import { DesktopSportSidebar, MobileSportSidebar } from '@/components/layout/SportSidebar';
 import { BetSlip } from '@/components/betting/BetSlip';
 import { useRealtimeMatches } from '@/hooks/useRealtimeMatches';
@@ -79,11 +79,7 @@ const LivePage = () => {
                 <span className="ml-3 text-muted-foreground">Loading matches...</span>
               </div>
             ) : filtered.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filtered.map(match => (
-                  <MatchCard key={match.id} match={match} />
-                ))}
-              </div>
+              <LeagueMatchList matches={filtered} />
             ) : (
               <div className="text-center py-20 text-muted-foreground">
                 <Zap className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />

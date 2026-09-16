@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Match } from '@/types';
-import { MatchCard } from '@/components/matches/MatchCard';
+import { LeagueMatchList } from '@/components/matches/LeagueMatchList';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Clock, TrendingUp, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -116,12 +116,10 @@ export function MatchTabs({ matches }: MatchTabsProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+            className="w-full"
           >
             {displayMatches.length > 0 ? (
-              displayMatches.map(match => (
-                <MatchCard key={match.id} match={match} />
-              ))
+              <LeagueMatchList matches={displayMatches} />
             ) : (
               <div className="col-span-full text-center py-16 text-muted-foreground">
                 <p className="text-lg font-medium">
