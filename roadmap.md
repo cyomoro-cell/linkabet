@@ -3,5 +3,8 @@
 - [x] Replace all sports APIs with API-Football (v3.football.api-sports.io)
 - [x] Remove unused old API keys
 - [x] Verify typecheck build errors are resolved
-- [ ] Reorganize match lists into country and league containers
+- [x] Reorganize match lists into country and league containers
+- [x] Live scores via Firecrawl (fetch-live-scores) + 2-minute schedule
+- [x] Automatic live odds recalculation with 5% margin and suspension rules
+- [x] Live score dashboard page at /live-scores with realtime updates
 - [ ] MTN MoMo deposits/withdrawals (waiting on credentials from user)
