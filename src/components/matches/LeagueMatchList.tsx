@@ -73,11 +73,12 @@ function MatchStatus({ match }: { match: Match }) {
 function MatchRow({ match }: { match: Match }) {
   const { selections, addSelection } = useBetSlip();
   const currentSelection = selections.find((selection) => selection.matchId === match.id);
+  const odds = match.odds ?? ({} as Match['odds']);
   const options = [
-    { key: 'home' as const, label: '1', odds: match.odds.home },
-    ...(match.odds.draw === undefined ? [] : [{ key: 'draw' as const, label: 'X', odds: match.odds.draw }]),
-    { key: 'away' as const, label: '2', odds: match.odds.away },
-  ];
+    { key: 'home' as const, label: '1', odds: Number(odds.home) },
+    ...(odds.draw === undefined || odds.draw === null ? [] : [{ key: 'draw' as const, label: 'X', odds: Number(odds.draw) }]),
+    { key: 'away' as const, label: '2', odds: Number(odds.away) },
+  ].filter((option) => Number.isFinite(option.odds) && option.odds > 0);
 
   return (
     <motion.article initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="group relative border-t border-border/70 first:border-t-0">
