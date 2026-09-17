@@ -91,39 +91,69 @@ export type Database = {
       }
       matches: {
         Row: {
+          away_odds: number | null
+          away_score: number
           away_team: Json
+          draw_odds: number | null
+          external_id: string | null
+          home_odds: number | null
+          home_score: number
           home_team: Json
           id: string
           is_live: boolean
           league: string
+          match_time: string | null
           minute: number | null
           odds: Json
+          odds_status: string
+          red_card: boolean
           sport: string
           start_time: string
+          status: string
           updated_at: string
         }
         Insert: {
+          away_odds?: number | null
+          away_score?: number
           away_team?: Json
+          draw_odds?: number | null
+          external_id?: string | null
+          home_odds?: number | null
+          home_score?: number
           home_team?: Json
           id: string
           is_live?: boolean
           league: string
+          match_time?: string | null
           minute?: number | null
           odds?: Json
+          odds_status?: string
+          red_card?: boolean
           sport: string
           start_time?: string
+          status?: string
           updated_at?: string
         }
         Update: {
+          away_odds?: number | null
+          away_score?: number
           away_team?: Json
+          draw_odds?: number | null
+          external_id?: string | null
+          home_odds?: number | null
+          home_score?: number
           home_team?: Json
           id?: string
           is_live?: boolean
           league?: string
+          match_time?: string | null
           minute?: number | null
           odds?: Json
+          odds_status?: string
+          red_card?: boolean
           sport?: string
           start_time?: string
+          status?: string
           updated_at?: string
         }
         Relationships: []
