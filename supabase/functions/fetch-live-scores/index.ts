@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { calculateLiveOdds } from './oddsEngine.ts';
 
 const GATEWAY = 'https://connector-gateway.lovable.dev/apify';
 const ACTOR_ID = 'reminiscent_folder~live-scores-api';
@@ -196,6 +197,12 @@ Deno.serve(async (req) => {
       const minute = m.match_minute;
       const status = normalizeStatus(m.status, minute);
       const live = status !== 'NS' && status !== 'FT';
+      const engine = calculateLiveOdds({
+        homeScore: m.home_score,
+        awayScore: m.away_score,
+        minute,
+        status,
+      });
       return {
         id: externalId,
         external_id: externalId,
@@ -203,7 +210,11 @@ Deno.serve(async (req) => {
         league: m.league || SPORT_LABELS[m.sport || 'football'] || 'Football',
         home_team: { id: slug(m.home_team), name: m.home_team, score: m.home_score ?? 0 },
         away_team: { id: slug(m.away_team), name: m.away_team, score: m.away_score ?? 0 },
-        odds: {},
+        odds: { home: engine.homeOdds, draw: engine.drawOdds, away: engine.awayOdds },
+        home_odds: engine.homeOdds,
+        draw_odds: engine.drawOdds,
+        away_odds: engine.awayOdds,
+        odds_status: engine.oddsStatus,
         home_score: m.home_score ?? 0,
         away_score: m.away_score ?? 0,
         status,
