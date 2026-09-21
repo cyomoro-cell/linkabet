@@ -48,6 +48,55 @@ function parseMinute(v: unknown): number | null {
   return null;
 }
 
+const SPORT_KEYWORDS: [RegExp, string][] = [
+  [/\b(atp|wta|itf|challenger|tennis|open\b.*(singles|doubles)|singles|doubles)\b/i, 'tennis'],
+  [/\b(nba|wnba|euroleague|basketball|bbl|acb)\b/i, 'basketball'],
+  [/\b(nhl|hockey|khl)\b/i, 'ice hockey'],
+  [/\b(mlb|baseball|npb)\b/i, 'baseball'],
+  [/\b(ipl|cricket|t20|odi|test match)\b/i, 'cricket'],
+  [/\b(nfl|ncaaf|american football)\b/i, 'american football'],
+  [/\b(ufc|mma|bellator)\b/i, 'mma'],
+  [/\b(rugby|super league|nrl)\b/i, 'rugby'],
+  [/\b(esports|lol|dota|csgo|valorant)\b/i, 'esports'],
+];
+
+const SPORT_LABELS: Record<string, string> = {
+  football: 'Football',
+  tennis: 'Tennis',
+  basketball: 'Basketball',
+  'ice hockey': 'Ice Hockey',
+  baseball: 'Baseball',
+  cricket: 'Cricket',
+  'american football': 'American Football',
+  mma: 'MMA',
+  rugby: 'Rugby',
+  esports: 'Esports',
+};
+
+/** Tennis/MMA style names: "Firstname Lastname" on both sides, no club keywords. */
+function looksLikePersonName(name: string): boolean {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2 || parts.length > 3) return false;
+  if (/\b(fc|sc|ac|cf|united|city|club|town|athletic|real|sporting|rovers|county|academy|u\d{2})\b/i.test(name)) {
+    return false;
+  }
+  return parts.every((p) => /^[A-Z][A-Za-z'’.-]+$/.test(p));
+}
+
+function detectSport(raw: Record<string, unknown>, league: string | undefined, home: string, away: string): string {
+  const explicit = String(raw.sport ?? raw.sport_name ?? raw.category ?? '').toLowerCase().trim();
+  if (explicit) {
+    for (const [re, sport] of SPORT_KEYWORDS) if (re.test(explicit)) return sport;
+    if (/soccer|football/.test(explicit)) return 'football';
+  }
+  const haystack = `${league ?? ''} ${raw.tournament ?? ''}`;
+  for (const [re, sport] of SPORT_KEYWORDS) if (re.test(haystack)) return sport;
+  if ((!league || /^football$/i.test(league)) && looksLikePersonName(home) && looksLikePersonName(away)) {
+    return 'tennis';
+  }
+  return 'football';
+}
+
 /** Map a raw Apify dataset item (unknown actor output shape) to ScrapedMatch. */
 function normalizeItem(raw: Record<string, unknown>): ScrapedMatch | null {
   const home = (raw.home_team ?? raw.homeTeam ?? raw.home ?? raw.home_team_name) as
@@ -62,8 +111,13 @@ function normalizeItem(raw: Record<string, unknown>): ScrapedMatch | null {
   const awayName = typeof away === 'string' ? away : away?.name;
   if (!homeName || !awayName) return null;
 
+  const rawLeague = (raw.league ?? raw.league_name ?? raw.tournament) as string | undefined;
+  const sport = detectSport(raw, rawLeague, homeName, awayName);
+  const league = !rawLeague || /^football$/i.test(rawLeague) ? SPORT_LABELS[sport] : rawLeague;
+
   return {
-    league: (raw.league ?? raw.league_name ?? raw.tournament) as string | undefined,
+    sport,
+    league,
     country: raw.country as string | undefined,
     home_team: homeName,
     away_team: awayName,
@@ -73,6 +127,7 @@ function normalizeItem(raw: Record<string, unknown>): ScrapedMatch | null {
     match_minute: parseMinute(raw.match_minute ?? raw.minute ?? raw.time),
   };
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
