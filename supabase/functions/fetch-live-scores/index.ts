@@ -5,6 +5,7 @@ const GATEWAY = 'https://connector-gateway.lovable.dev/apify';
 const ACTOR_ID = 'reminiscent_folder~live-scores-api';
 
 interface ScrapedMatch {
+  sport?: string;
   league?: string;
   country?: string;
   home_team: string;
