@@ -199,8 +199,8 @@ Deno.serve(async (req) => {
       return {
         id: externalId,
         external_id: externalId,
-        sport: 'football',
-        league: m.league || 'Football',
+        sport: m.sport || 'football',
+        league: m.league || SPORT_LABELS[m.sport || 'football'] || 'Football',
         home_team: { id: slug(m.home_team), name: m.home_team, score: m.home_score ?? 0 },
         away_team: { id: slug(m.away_team), name: m.away_team, score: m.away_score ?? 0 },
         odds: {},
