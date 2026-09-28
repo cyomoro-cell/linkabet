@@ -7,4 +7,6 @@
 - [x] Live scores via Firecrawl (fetch-live-scores) + 2-minute schedule
 - [x] Automatic live odds recalculation with 5% margin and suspension rules
 - [x] Live score dashboard page at /live-scores with realtime updates
+- [x] Odds engine utility, odds saved on every live-scores refresh
+- [ ] Live scores table grouped by league, last-updated time, postponed handling (source URL for Firecrawl pending from user)
 - [ ] MTN MoMo deposits/withdrawals (waiting on credentials from user)
