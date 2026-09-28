@@ -1,14 +1,18 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Loader2, Radio, Receipt, Lock } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Loader2, Radio, Receipt, Lock, RefreshCw, Clock3 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { BetSlip } from '@/components/betting/BetSlip';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useLiveScores, LiveScoreMatch } from '@/hooks/useLiveScores';
 import { useBetSlip } from '@/hooks/useBetSlip';
+import { supabase } from '@/integrations/supabase/client';
 import { Match } from '@/types';
+
+const REFRESH_MINUTES = 2;
+const POSTPONED = ['POSTPONED', 'POSTP', 'CANCELLED', 'CANC', 'ABANDONED', 'SUSP'];
 
 function toMatch(m: LiveScoreMatch): Match {
   return {
@@ -25,10 +29,44 @@ function toMatch(m: LiveScoreMatch): Match {
   };
 }
 
+function timeAgo(date: Date | null, now: number) {
+  if (!date) return 'never';
+  const s = Math.max(0, Math.round((now - date.getTime()) / 1000));
+  if (s < 60) return `${s}s ago`;
+  return `${Math.floor(s / 60)} min ago`;
+}
+
 export default function LiveDashboardPage() {
   const { matches, isLoading, liveCount } = useLiveScores();
   const { selections } = useBetSlip();
   const [betSlipOpen, setBetSlipOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const lastUpdated = useMemo(() => {
+    const times = matches.map((m) => new Date(m.updated_at).getTime()).filter(Number.isFinite);
+    return times.length ? new Date(Math.max(...times)) : null;
+  }, [matches]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, LiveScoreMatch[]>();
+    matches.forEach((m) => {
+      const key = m.league || 'Other';
+      map.set(key, [...(map.get(key) ?? []), m]);
+    });
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [matches]);
+
+  const refreshNow = async () => {
+    setRefreshing(true);
+    await supabase.functions.invoke('fetch-live-scores').catch(() => null);
+    setRefreshing(false);
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -36,24 +74,32 @@ export default function LiveDashboardPage() {
       <div className="flex-1 flex">
         <main className="flex-1 min-w-0">
           <div className="border-b border-border bg-card/50">
-            <div className="container py-6 flex items-center gap-3">
-              <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-live/10">
-                <Radio className="h-6 w-6 text-live" />
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-live opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-live" />
-                </span>
+            <div className="container py-6 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-live/10">
+                  <Radio className="h-6 w-6 text-live" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold">Live Score Dashboard</h1>
+                  <p className="text-sm text-muted-foreground">
+                    {liveCount} in play · auto-refresh every {REFRESH_MINUTES} min
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-2xl font-bold">Live Score Dashboard</h1>
-                <p className="text-sm text-muted-foreground">
-                  {liveCount} in play · scores and odds update automatically
-                </p>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  Last update: {lastUpdated ? `${lastUpdated.toLocaleTimeString()} (${timeAgo(lastUpdated, now)})` : 'never'}
+                </span>
+                <Button variant="outline" size="sm" onClick={refreshNow} disabled={refreshing}>
+                  <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  {refreshing ? 'Updating…' : 'Refresh'}
+                </Button>
               </div>
             </div>
           </div>
 
-          <div className="container py-6">
+          <div className="container py-6 space-y-5">
             {isLoading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -61,15 +107,34 @@ export default function LiveDashboardPage() {
               </div>
             ) : matches.length === 0 ? (
               <div className="text-center py-20 text-muted-foreground">
-                <p className="text-lg font-medium">No active games right now</p>
+                <p className="text-lg font-medium">No matches right now</p>
                 <p className="text-sm mt-1">New fixtures appear here automatically.</p>
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {matches.map((m) => (
-                  <LiveMatchCard key={m.id} match={m} />
-                ))}
-              </div>
+              groups.map(([league, rows]) => (
+                <section key={league} className="overflow-hidden rounded-lg border border-border bg-card">
+                  <header className="flex items-center justify-between border-b border-border bg-secondary/45 px-4 py-3">
+                    <h2 className="text-sm font-bold">{league}</h2>
+                    <span className="text-xs text-muted-foreground">{rows.length} matches</span>
+                  </header>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-xs text-muted-foreground">
+                        <tr className="border-b border-border">
+                          <th className="px-4 py-2 text-left font-medium">Status</th>
+                          <th className="px-4 py-2 text-left font-medium">Match</th>
+                          <th className="px-4 py-2 text-center font-medium">Score</th>
+                          <th className="hidden px-4 py-2 text-left font-medium md:table-cell">Date</th>
+                          <th className="px-4 py-2 text-right font-medium">Odds 1 · X · 2</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((m) => <MatchTableRow key={m.id} match={m} />)}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ))
             )}
           </div>
         </main>
@@ -97,10 +162,21 @@ export default function LiveDashboardPage() {
   );
 }
 
-function LiveMatchCard({ match }: { match: LiveScoreMatch }) {
+function StatusBadge({ match }: { match: LiveScoreMatch }) {
+  const s = (match.status || '').toUpperCase();
+  if (POSTPONED.some((p) => s.startsWith(p))) return <Badge variant="destructive">Postponed</Badge>;
+  if (match.is_live) return <Badge className="bg-live/10 text-live hover:bg-live/10">{match.match_time || match.status}</Badge>;
+  if (s === 'NS' || !s) return <Badge variant="secondary">Upcoming</Badge>;
+  return <Badge variant="outline">{match.status}</Badge>;
+}
+
+function MatchTableRow({ match }: { match: LiveScoreMatch }) {
   const { selections, addSelection } = useBetSlip();
   const current = selections.find((s) => s.matchId === match.id);
-  const suspended = match.odds_status === 'suspended';
+  const s = (match.status || '').toUpperCase();
+  const postponed = POSTPONED.some((p) => s.startsWith(p));
+  const suspended = postponed || match.odds_status === 'suspended';
+  const upcoming = s === 'NS';
 
   const pick = (selection: 'home' | 'draw' | 'away', odds: number | null) => {
     if (suspended || !odds) return;
@@ -108,75 +184,43 @@ function LiveMatchCard({ match }: { match: LiveScoreMatch }) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-border bg-card p-4 card-hover"
-    >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-medium text-muted-foreground truncate">{match.league}</span>
-        <span
-          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-            match.is_live ? 'bg-live/10 text-live' : 'bg-muted text-muted-foreground'
-          }`}
-        >
-          {match.is_live ? match.match_time || match.status : match.status === 'NS' ? 'Upcoming' : match.status}
-        </span>
-      </div>
-
-      <div className="space-y-2 mb-4">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold truncate">{match.home_team?.name}</span>
-          <motion.span key={`h${match.home_score}`} initial={{ scale: 1.4 }} animate={{ scale: 1 }} className="font-bold text-primary">
-            {match.home_score}
-          </motion.span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="font-semibold truncate">{match.away_team?.name}</span>
-          <motion.span key={`a${match.away_score}`} initial={{ scale: 1.4 }} animate={{ scale: 1 }} className="font-bold text-primary">
-            {match.away_score}
-          </motion.span>
-        </div>
-      </div>
-
-      {suspended ? (
-        <div className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border py-2.5 text-xs text-muted-foreground">
-          <Lock className="h-3.5 w-3.5" /> Betting suspended
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-2">
-          <OddsButton label="1" odds={match.home_odds} active={current?.selection === 'home'} onClick={() => pick('home', match.home_odds)} />
-          <OddsButton label="X" odds={match.draw_odds} active={current?.selection === 'draw'} onClick={() => pick('draw', match.draw_odds)} />
-          <OddsButton label="2" odds={match.away_odds} active={current?.selection === 'away'} onClick={() => pick('away', match.away_odds)} />
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-function OddsButton({
-  label,
-  odds,
-  active,
-  onClick,
-}: {
-  label: string;
-  odds: number | null;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      variant={active ? ('oddsActive' as never) : ('odds' as never)}
-      size="sm"
-      disabled={!odds}
-      className="flex flex-col gap-0.5 h-auto py-2"
-      onClick={onClick}
-    >
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <motion.span key={String(odds)} initial={{ opacity: 0.3 }} animate={{ opacity: 1 }} className="font-bold">
-        {odds ? Number(odds).toFixed(2) : '-'}
-      </motion.span>
-    </Button>
+    <tr className="border-b border-border/60 last:border-b-0 hover:bg-secondary/30">
+      <td className="px-4 py-3 whitespace-nowrap"><StatusBadge match={match} /></td>
+      <td className="px-4 py-3">
+        <div className="font-semibold truncate max-w-[14rem]">{match.home_team?.name ?? 'TBD'}</div>
+        <div className="font-semibold truncate max-w-[14rem]">{match.away_team?.name ?? 'TBD'}</div>
+      </td>
+      <td className="px-4 py-3 text-center font-bold text-primary whitespace-nowrap">
+        {upcoming || postponed ? '–' : `${match.home_score ?? 0} : ${match.away_score ?? 0}`}
+      </td>
+      <td className="hidden px-4 py-3 text-xs text-muted-foreground md:table-cell whitespace-nowrap">
+        {new Date(match.updated_at).toLocaleDateString()}
+      </td>
+      <td className="px-4 py-3">
+        {suspended ? (
+          <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+            <Lock className="h-3.5 w-3.5" /> Suspended
+          </div>
+        ) : (
+          <div className="flex justify-end gap-1.5">
+            {(['home', 'draw', 'away'] as const).map((k) => {
+              const odds = match[`${k}_odds`];
+              return (
+                <Button
+                  key={k}
+                  size="sm"
+                  variant={current?.selection === k ? ('oddsActive' as never) : ('odds' as never)}
+                  disabled={!odds}
+                  className="h-8 min-w-[3.25rem] px-2"
+                  onClick={() => pick(k, odds)}
+                >
+                  {odds ? Number(odds).toFixed(2) : '-'}
+                </Button>
+              );
+            })}
+          </div>
+        )}
+      </td>
+    </tr>
   );
 }
