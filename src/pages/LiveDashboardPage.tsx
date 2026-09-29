@@ -64,7 +64,7 @@ export default function LiveDashboardPage() {
 
   const refreshNow = async () => {
     setRefreshing(true);
-    await supabase.functions.invoke('fetch-live-scores').catch(() => null);
+    void supabase;
     setRefreshing(false);
   };
 
