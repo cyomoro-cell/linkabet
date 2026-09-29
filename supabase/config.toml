@@ -12,6 +12,3 @@ enabled = true
 
 [functions.ai-assistant]
 verify_jwt = false
-
-[functions.fetch-matches]
-verify_jwt = false

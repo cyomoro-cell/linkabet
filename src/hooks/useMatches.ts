@@ -32,10 +32,10 @@ function mapAPIMatch(m: APIMatch): Match {
   };
 }
 
+// No match source connected yet — returns an empty list.
 async function fetchMatches(): Promise<Match[]> {
-  const { data, error } = await supabase.functions.invoke('fetch-matches');
-  if (error) throw error;
-  return (data?.matches || []).map(mapAPIMatch);
+  void supabase;
+  return ([] as any[]).map(mapAPIMatch);
 }
 
 export function useMatches() {
