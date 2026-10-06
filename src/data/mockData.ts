@@ -110,12 +110,14 @@ export const mockPromotions: Promotion[] = [
     description: 'Get up to 50% extra on accumulators',
     badge: 'HOT',
     ctaText: 'Learn More',
+    endsAt: new Date(Date.now() + (2 * 24 + 14) * 3600_000).toISOString(),
   },
   {
     id: '3',
     title: 'Free Bet Club',
     description: 'Bet $50, Get $10 free bet every week',
     ctaText: 'Join Now',
+    endsAt: new Date(Date.now() + 5 * 24 * 3600_000).toISOString(),
   },
 ];
 

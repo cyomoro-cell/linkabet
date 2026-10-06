@@ -89,4 +89,5 @@ export interface Promotion {
   image?: string;
   badge?: string;
   ctaText: string;
+  endsAt?: string;
 }
