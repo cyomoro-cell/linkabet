@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Receipt, Loader2 } from 'lucide-react';
 import { useBetSlip } from '@/hooks/useBetSlip';
 import { Sport } from '@/types';
+import { LiveTicker, BigWinsCarousel, MobileWalletBar, LiveChatButton } from '@/components/sections/HomeLiveExtras';
 
 const Index = () => {
   const { selections } = useBetSlip();
@@ -31,6 +32,7 @@ const Index = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      <LiveTicker />
 
       <div className="flex-1 flex">
         {/* Desktop Sidebar */}
@@ -45,6 +47,7 @@ const Index = () => {
         {/* Main Content */}
         <main className="flex-1 min-w-0">
           <HeroSection />
+          <BigWinsCarousel />
 
           {/* Mobile filter bar */}
           <div className="lg:hidden container py-3">
@@ -79,6 +82,9 @@ const Index = () => {
       </div>
 
       <Footer />
+      <div className="h-16 lg:hidden" />
+      <MobileWalletBar />
+      <LiveChatButton />
 
       {/* Mobile Bet Slip */}
       <div className="lg:hidden">
@@ -87,7 +93,7 @@ const Index = () => {
             <Button
               variant="hero"
               size="lg"
-              className="fixed bottom-6 right-6 z-50 rounded-full shadow-xl"
+              className="fixed bottom-36 right-4 z-50 rounded-full shadow-xl"
             >
               <Receipt className="h-5 w-5" />
               {selections.length > 0 && (

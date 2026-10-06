@@ -80,7 +80,7 @@ export function MobileWalletBar() {
           </p>
         </div>
       </div>
-      <Button size="sm" variant="hero" asChild className="mr-16">
+      <Button size="sm" variant="hero" asChild>
         <Link to={isAuthenticated ? '/account' : '/auth'}>Deposit</Link>
       </Button>
     </div>
