@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import LivePage from "./pages/LivePage";
 import SportsDashboardPage from "./pages/SportsDashboardPage";
+import SportsPage from "./pages/SportsPage";
 import CasinoPage from "./pages/CasinoPage";
 import AuthPage from "./pages/AuthPage";
 import AccountPage from "./pages/AccountPage";
@@ -29,7 +30,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/live" element={<LivePage />} />
           <Route path="/live-scores" element={<SportsDashboardPage />} />
-          <Route path="/sports" element={<SportsDashboardPage />} />
+          <Route path="/sports" element={<SportsPage />} />
           <Route path="/matches" element={<MatchesPage />} />
           <Route path="/casino" element={<CasinoPage />} />
           <Route path="/auth" element={<AuthPage />} />
