@@ -124,28 +124,44 @@ Deno.serve(async (req) => {
     const pages = await res.json();
     const markdown = String(pages?.[0]?.markdown ?? '').slice(0, 60000);
 
-    // 2) AI turns the markdown into structured JSON.
-    const ai = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    // 2) AI turns the markdown into structured JSON (streamed).
+    const ai = await fetch('https://ai.gateway.lovable.dev/v1/responses', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${lovableKey}` },
+      headers: { 'Content-Type': 'application/json', 'Lovable-API-Key': lovableKey, 'X-Lovable-AIG-SDK': 'fetch' },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: 'You extract structured sports data from web page text. Only use facts present in the text.' },
-          { role: 'user', content: `${cfg.prompt}\n\nPAGE:\n${markdown}` },
-        ],
-        tools: [{ type: 'function', function: { name: 'save', description: 'Save extracted data', parameters: cfg.schema } }],
-        tool_choice: { type: 'function', function: { name: 'save' } },
+        model: 'openai/gpt-6-astra',
+        stream: true,
+        store: false,
+        reasoning: { effort: 'low' },
+        instructions: 'You extract structured sports data from web page text. Only use facts present in the text. Reply with JSON only.',
+        input: `${cfg.prompt}\n\nPAGE:\n${markdown}`,
+        text: { format: { type: 'json_schema', name: 'extract', schema: cfg.schema, strict: false } },
       }),
     });
-    if (!ai.ok) {
+    if (!ai.ok || !ai.body) {
       console.error(`AI extraction failed [${ai.status}]: ${await ai.text()}`);
       if (cached) return reply({ ok: true, cached: true, stale: true, source: source.name, fetched_at: cached.fetched_at, items: cached.payload });
       return reply({ ok: false, error: 'Could not read the data from the source right now.' }, 200);
     }
-    const aiOut = await ai.json();
+    let text = '';
+    const reader = ai.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        try {
+          const ev = JSON.parse(line.slice(5).trim());
+          if (ev.type === 'response.output_text.delta') text += ev.delta ?? '';
+        } catch { /* ignore keepalives */ }
+      }
+    }
     let json: any = {};
-    try { json = JSON.parse(aiOut?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments ?? '{}'); } catch { json = {}; }
+    try { json = JSON.parse(text || '{}'); } catch { json = {}; }
     const items = normalize(type, json, source.name);
     const fetched_at = new Date().toISOString();
     await db.from('sports_cache').upsert({ cache_key: key, payload: items, fetched_at });
