@@ -222,3 +222,51 @@
     }
   }
 }
+
+@layer utilities {
+  .bg-mesh {
+    background:
+      radial-gradient(40% 50% at 20% 30%, hsl(var(--primary) / 0.18), transparent 70%),
+      radial-gradient(45% 55% at 80% 60%, hsl(220 70% 25% / 0.55), transparent 70%),
+      radial-gradient(35% 45% at 60% 10%, hsl(160 70% 25% / 0.35), transparent 70%);
+    background-size: 200% 200%;
+    animation: mesh-move 18s ease-in-out infinite alternate;
+  }
+  @keyframes mesh-move {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 100% 100%; }
+  }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(-2deg); }
+    50% { transform: translateY(-14px) rotate(-1deg); }
+  }
+  .animate-particle { animation: particle linear infinite; }
+  @keyframes particle {
+    0% { transform: translateY(0); opacity: 0; }
+    15% { opacity: 0.8; }
+    100% { transform: translateY(-110vh); opacity: 0; }
+  }
+  .animate-marquee { animation: marquee 40s linear infinite; }
+  .animate-marquee:hover { animation-play-state: paused; }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  .animate-glow-pulse { animation: glow-pulse 2s ease-in-out infinite; }
+  @keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 hsl(var(--accent) / 0.6); }
+    50% { box-shadow: 0 0 14px 2px hsl(var(--accent) / 0.6); }
+  }
+  .flash-up { animation: flash-up 1s ease-out; }
+  @keyframes flash-up { 0% { background-color: hsl(var(--primary) / 0.45); } 100% { background-color: transparent; } }
+  .flash-down { animation: flash-down 1s ease-out; }
+  @keyframes flash-down { 0% { background-color: hsl(var(--live) / 0.45); } 100% { background-color: transparent; } }
+  .text-gradient-emerald {
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(160 84% 39%));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .border-gradient-top {
+    border-image: linear-gradient(90deg, hsl(var(--primary)), transparent) 1;
+  }
+}

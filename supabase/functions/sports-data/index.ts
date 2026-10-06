@@ -102,27 +102,66 @@ Deno.serve(async (req) => {
     }
 
     const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-    const fcKey = Deno.env.get('FIRECRAWL_API_KEY');
-    if (!lovableKey || !fcKey) return reply({ ok: false, error: 'Sports data source is not configured' }, 500);
+    const apifyKey = Deno.env.get('APIFY_API_KEY');
+    if (!lovableKey || !apifyKey) return reply({ ok: false, error: 'Sports data source is not configured' }, 500);
 
     const cfg = SCHEMAS[type];
-    const res = await fetch(`${GATEWAY}/scrape`, {
+    // 1) Apify fetches the page as clean markdown.
+    const res = await fetch(`${APIFY}/acts/apify~rag-web-browser/run-sync-get-dataset-items`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${lovableKey}`, 'X-Connection-Api-Key': fcKey },
-      body: JSON.stringify({ url: source.url, onlyMainContent: true, formats: [{ type: 'json', schema: cfg.schema, prompt: cfg.prompt }] }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${lovableKey}`, 'X-Connection-Api-Key': apifyKey },
+      body: JSON.stringify({ query: source.url, maxResults: 1, outputFormats: ['markdown'] }),
     });
 
     if (!res.ok) {
       const details = await res.text();
-      console.error(`Firecrawl failed [${res.status}] for ${source.url}: ${details}`);
-      // Serve stale results if we have them.
+      console.error(`Apify failed [${res.status}] for ${source.url}: ${details}`);
       if (cached) return reply({ ok: true, cached: true, stale: true, source: source.name, fetched_at: cached.fetched_at, items: cached.payload });
-      const outOfCredits = res.status === 402 || /credit/i.test(details);
-      return reply({ ok: false, error: outOfCredits ? 'The data provider is out of credits.' : 'Could not load data from the source right now.', status: res.status }, 200);
+      const limit = /limit|credit|usage/i.test(details);
+      return reply({ ok: false, error: limit ? 'The Apify account has reached its monthly usage limit.' : 'Could not load data from the source right now.', status: res.status }, 200);
     }
 
-    const out = await res.json();
-    const json = out?.data?.json ?? out?.json ?? {};
+    const pages = await res.json();
+    const markdown = String(pages?.[0]?.markdown ?? '').slice(0, 60000);
+
+    // 2) AI turns the markdown into structured JSON (streamed).
+    const ai = await fetch('https://ai.gateway.lovable.dev/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Lovable-API-Key': lovableKey, 'X-Lovable-AIG-SDK': 'fetch' },
+      body: JSON.stringify({
+        model: 'openai/gpt-6-astra',
+        stream: true,
+        store: false,
+        reasoning: { effort: 'low' },
+        instructions: 'You extract structured sports data from web page text. Only use facts present in the text. Reply with JSON only.',
+        input: `${cfg.prompt}\n\nPAGE:\n${markdown}`,
+        text: { format: { type: 'json_schema', name: 'extract', schema: cfg.schema, strict: false } },
+      }),
+    });
+    if (!ai.ok || !ai.body) {
+      console.error(`AI extraction failed [${ai.status}]: ${await ai.text()}`);
+      if (cached) return reply({ ok: true, cached: true, stale: true, source: source.name, fetched_at: cached.fetched_at, items: cached.payload });
+      return reply({ ok: false, error: 'Could not read the data from the source right now.' }, 200);
+    }
+    let text = '';
+    const reader = ai.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        try {
+          const ev = JSON.parse(line.slice(5).trim());
+          if (ev.type === 'response.output_text.delta') text += ev.delta ?? '';
+        } catch { /* ignore keepalives */ }
+      }
+    }
+    let json: any = {};
+    try { json = JSON.parse(text || '{}'); } catch { json = {}; }
     const items = normalize(type, json, source.name);
     const fetched_at = new Date().toISOString();
     await db.from('sports_cache').upsert({ cache_key: key, payload: items, fetched_at });
