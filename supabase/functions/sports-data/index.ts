@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { z } from 'npm:zod@3';
 
-const GATEWAY = 'https://connector-gateway.lovable.dev/firecrawl/v2';
+const APIFY = 'https://connector-gateway.lovable.dev/apify';
 const CACHE_SECONDS = 60;
 
 // Add or remove sources here — no other code changes needed.

@@ -22,14 +22,14 @@ const MATCHES: SportsMatch[] = [
   { id: 's8', sport: 'tennis', league: 'ATP Finals', home: 'N. Djokovic', away: 'C. Alcaraz', startTime: at(16), live: true, minute: 72, homeScore: 1, awayScore: 0, odds: { home: 1.6, away: 2.3 } },
   { id: 's9', sport: 'tennis', league: 'WTA Finals', home: 'I. Swiatek', away: 'A. Sabalenka', startTime: at(20), live: false, odds: { home: 1.75, away: 2.05 } },
   { id: 's10', sport: 'esports', league: 'LoL Worlds', home: 'T1', away: 'Gen.G', startTime: at(13, 0, 1), live: false, odds: { home: 1.7, away: 2.1 } },
-  { id: 's11', sport: 'american-football' as SportsMatch['sport'], league: 'NFL', home: 'Chiefs', away: 'Eagles', startTime: at(1, 15, 1), live: false, odds: { home: 1.8, away: 2.0 } },
+  { id: 's11', sport: 'american football', league: 'NFL', home: 'Chiefs', away: 'Eagles', startTime: at(1, 15, 1), live: false, odds: { home: 1.8, away: 2.0 } },
 ];
 
 const SPORTS = [
   { id: 'football', label: 'Soccer', icon: '⚽', count: 24 },
   { id: 'basketball', label: 'Basketball', icon: '🏀', count: 8 },
   { id: 'tennis', label: 'Tennis', icon: '🎾', count: 12 },
-  { id: 'american-football', label: 'Football', icon: '🏈', count: 5 },
+  { id: 'american football', label: 'Football', icon: '🏈', count: 5 },
   { id: 'esports', label: 'Esports', icon: '🎮', count: 3 },
 ];
 const FILTERS = ['Live Now', 'Today', 'Upcoming', 'All'] as const;

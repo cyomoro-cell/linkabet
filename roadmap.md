@@ -12,9 +12,10 @@
 - [ ] MTN MoMo deposits/withdrawals (waiting on credentials from user)
 
 ## Redesign (Oct 6)
-- [ ] Hero: animated mesh/particles, gradient "Win Bigger", bet slip mockup, trust badges, glass Watch Live
-- [ ] Promotions: hover lift/glow, gradient overlay, big icons, pulsing badges, countdown, arrow links
-- [ ] Footer: newsletter, payment logos, language switcher, rating widget, glowing socials, gradient top border
-- [ ] Homepage: live ticker, mobile wallet bar, live chat button, big wins carousel
-- [ ] /sports 3-column page (sidebar, league match rows, bet slip with Singles/Accumulator/System)
-- [ ] OddsButton (flash + trend arrow) and MatchRow (pre-match/live, simulated odds, favorite star)
+- [x] Hero: animated mesh/particles, gradient "Win Bigger", bet slip mockup, trust badges, glass Watch Live
+- [x] Promotions: hover lift/glow, gradient overlay, big icons, pulsing badges, countdown, arrow links
+- [x] Footer: newsletter, payment logos, language switcher, rating widget, glowing socials, gradient top border
+- [x] Homepage: live ticker, mobile wallet bar, live chat button, big wins carousel
+- [x] /sports 3-column page (sidebar, league match rows, bet slip with Singles/Accumulator/System)
+- [x] OddsButton (flash + trend arrow) and MatchRow (pre-match/live, simulated odds, favorite star)
+- [ ] Add 5dollarfootballapi as real sports data source
