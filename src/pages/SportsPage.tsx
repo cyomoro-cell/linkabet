@@ -67,7 +67,7 @@ export default function SportsPage() {
                 sport === s.id ? 'border-primary bg-primary/10 font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground')}>
               <span className="text-base">{s.icon}</span>
               <span className="flex-1 text-left">{s.label}</span>
-              <span className="rounded-md bg-secondary px-1.5 text-[11px]">{s.count}</span>
+              <span className="rounded-md bg-secondary px-1.5 text-[11px]">{MATCHES.filter((m) => m.sport === s.id).length}</span>
             </button>
           ))}
           <p className="mb-2 mt-6 px-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Show</p>

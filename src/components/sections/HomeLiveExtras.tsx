@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency } from '@/lib/currency';
 import { toast } from 'sonner';
+import { useFootballMatches } from '@/hooks/useFootballMatches';
 
-const tickerItems = [
+const _unused = [
   '⚽ APR 2-1 Rayon Sports 67\'',
   '🏀 REG 78-72 Patriots Q4',
   '🎾 Djokovic 6-4 3-2 Alcaraz',
@@ -16,7 +17,12 @@ const tickerItems = [
 ];
 
 export function LiveTicker() {
-  const items = [...tickerItems, ...tickerItems];
+  const { data } = useFootballMatches();
+  const real = (data ?? []).sort((a, b) => Number(b.live) - Number(a.live)).slice(0, 12).map((m) =>
+    m.live ? `⚽ ${m.home} ${m.homeScore ?? 0}-${m.awayScore ?? 0} ${m.away}${m.minute ? ` ${m.minute}'` : ''}`
+      : `⚽ ${m.home} vs ${m.away} · ${m.startTime.toLocaleDateString(undefined, { weekday: 'short' })} ${m.startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${m.odds ? ` · ${m.odds.home.toFixed(2)} / ${m.odds.draw?.toFixed(2) ?? '-'} / ${m.odds.away.toFixed(2)}` : ''}`);
+  const list = real.length ? real : ['Loading real matches…'];
+  const items = [...list, ...list];
   return (
     <div className="relative flex items-center overflow-hidden border-b border-border bg-card/80">
       <div className="z-10 flex shrink-0 items-center gap-2 bg-live px-3 py-2 text-xs font-bold text-live-foreground">
