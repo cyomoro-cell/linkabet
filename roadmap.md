@@ -18,4 +18,4 @@
 - [x] Homepage: live ticker, mobile wallet bar, live chat button, big wins carousel
 - [x] /sports 3-column page (sidebar, league match rows, bet slip with Singles/Accumulator/System)
 - [x] OddsButton (flash + trend arrow) and MatchRow (pre-match/live, simulated odds, favorite star)
-- [ ] Add 5dollarfootballapi as real sports data source
+- [x] Add 5dollarfootballapi as real sports data source
