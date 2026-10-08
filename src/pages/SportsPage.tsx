@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { MatchRow, SportsMatch } from '@/components/sports/MatchRow';
 import { useBetSlip } from '@/hooks/useBetSlip';
 import { toast } from 'sonner';
+import { useFootballMatches } from '@/hooks/useFootballMatches';
 
 const at = (h: number, m = 0, dayOffset = 0) => { const d = new Date(); d.setDate(d.getDate() + dayOffset); d.setHours(h, m, 0, 0); return d; };
 
@@ -41,6 +42,8 @@ export default function SportsPage() {
   const [date, setDate] = useState('');
   const [view, setView] = useState<'list' | 'grid'>('list');
 
+  const { data: realMatches, isLoading, isError } = useFootballMatches();
+  const MATCHES = realMatches ?? [];
   const groups = useMemo(() => {
     const today = new Date().toDateString();
     const list = MATCHES.filter((m) => m.sport === sport)
@@ -50,7 +53,7 @@ export default function SportsPage() {
     const map = new Map<string, SportsMatch[]>();
     list.forEach((m) => map.set(m.league, [...(map.get(m.league) ?? []), m]));
     return [...map.entries()];
-  }, [sport, filter, q, date]);
+  }, [MATCHES, sport, filter, q, date]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -108,7 +111,7 @@ export default function SportsPage() {
           </div>
 
           {groups.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border py-16 text-center text-muted-foreground">No matches for this filter.</div>
+            <div className="rounded-2xl border border-dashed border-border py-16 text-center text-muted-foreground">{isLoading ? 'Loading real matches…' : isError ? 'Could not load matches right now. Retrying soon.' : 'No matches for this filter.'}</div>
           ) : (
             <div className="space-y-5">
               {groups.map(([league, rows]) => (
