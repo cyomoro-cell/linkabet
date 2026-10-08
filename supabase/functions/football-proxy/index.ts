@@ -2,9 +2,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 
 const API = 'https://api.5dollarfootballapi.com/v1';
-const FIXTURE_TTL = 300; // seconds — free plan allows 60 requests/hour
+const FIXTURE_TTL = 600; // seconds — free plan allows 60 requests/hour
 const ODDS_TTL = 1800;
-const ODDS_PER_RUN = 8;
+const ODDS_PER_RUN = 4;
 
 const reply = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -56,12 +56,15 @@ Deno.serve(async (req) => {
     let fixtures: any[] = [];
     try {
       const now = Math.floor(Date.now() / 1000);
-      const [live, upcoming] = await Promise.all([
-        api('/fixtures?status=live&per_page=500', key),
-        api(`/fixtures?status=scheduled&start_time=${now}&end_time=${now + 86400}&per_page=100`, key),
-      ]);
+      const live = await api('/fixtures?status=live&per_page=500', key);
+      const all: any[] = [...(live.data ?? [])];
+      for (let d = 0; d < 3 && all.length < 25; d++) {
+        const s = now + d * 86400;
+        const up = await api(`/fixtures?status=scheduled&start_time=${s}&end_time=${s + 86400}&per_page=100`, key);
+        all.push(...(up.data ?? []));
+      }
       const seen = new Set<number>();
-      for (const f of [...(live.data ?? []), ...(upcoming.data ?? [])]) {
+      for (const f of all) {
         if (seen.has(f.id) || f.status === 'finished') continue;
         seen.add(f.id);
         fixtures.push(f);
