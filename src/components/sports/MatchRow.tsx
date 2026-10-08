@@ -17,7 +17,7 @@ export interface SportsMatch {
   minute?: number;
   homeScore?: number;
   awayScore?: number;
-  odds: { home: number; draw?: number; away: number };
+  odds?: { home: number; draw?: number; away: number };
 }
 
 function TeamLogo({ name }: { name: string }) {
@@ -30,7 +30,7 @@ function TeamLogo({ name }: { name: string }) {
 
 const jitter = (v: number) => Math.max(1.01, Math.round((v + (Math.random() - 0.5) * 0.2) * 100) / 100);
 
-export function toBetMatch(m: SportsMatch, odds = m.odds): Match {
+export function toBetMatch(m: SportsMatch, odds = m.odds ?? { home: 0, away: 0 }): Match {
   return {
     id: m.id, sport: m.sport, league: m.league,
     homeTeam: { id: `${m.id}-h`, name: m.home, score: m.homeScore },
@@ -47,18 +47,19 @@ export function MatchRow({ match, view = 'list' }: { match: SportsMatch; view?: 
 
   // Simulated live odds — will be replaced by real data later.
   useEffect(() => {
-    if (!match.live) return;
+    if (!match.live || !match.odds) return;
     const t = setInterval(() => {
-      setOdds((o) => ({ home: jitter(o.home), draw: o.draw ? jitter(o.draw) : undefined, away: jitter(o.away) }));
+      setOdds((o) => o && ({ home: jitter(o.home), draw: o.draw ? jitter(o.draw) : undefined, away: jitter(o.away) }));
     }, 4000 + Math.random() * 3000);
     return () => clearInterval(t);
   }, [match.live]);
 
-  const opts = [
+  useEffect(() => { setOdds(match.odds); }, [match.odds]);
+  const opts = odds ? [
     { key: 'home' as const, label: '1', v: odds.home },
     ...(odds.draw ? [{ key: 'draw' as const, label: 'X', v: odds.draw }] : []),
     { key: 'away' as const, label: '2', v: odds.away },
-  ];
+  ] : [];
 
   const time = match.live ? null : (() => {
     const d = match.startTime;
@@ -94,6 +95,7 @@ export function MatchRow({ match, view = 'list' }: { match: SportsMatch; view?: 
       </div>
 
       <div className="flex items-center gap-2">
+        {opts.length === 0 && <span className="px-2 text-xs text-muted-foreground">Odds soon</span>}
         {opts.map((o) => (
           <OddsButton key={o.key} label={o.label} odds={o.v} selected={current?.selection === o.key}
             onClick={() => addSelection({ matchId: match.id, match: toBetMatch(match, odds), selection: o.key, odds: o.v })} />
