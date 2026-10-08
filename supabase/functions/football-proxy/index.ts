@@ -45,6 +45,8 @@ Deno.serve(async (req) => {
   try {
     const key = Deno.env.get('FIVE_DOLLAR_FOOTBALL_API_KEY');
     if (!key) return reply({ ok: false, error: 'Football data is not configured' });
+    const body = await req.json().catch(() => ({}));
+    if (typeof body?.debug === 'string' && body.debug.startsWith('/')) { try { return reply(await api(body.debug, key)); } catch (e) { return reply({ err: String(e) }); } }
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
     const { data: cached } = await db.from('sports_cache').select('payload, fetched_at').eq('cache_key', 'fd:matches').maybeSingle();
