@@ -1,6 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 
+import { adjustOddsForLiability } from './oddsLiability.ts';
+
 const API = 'https://api.5dollarfootballapi.com/v1';
 const FIXTURE_TTL = 600; // seconds — free plan allows 60 requests/hour
 const ODDS_TTL = 1800;
@@ -40,6 +42,31 @@ function norm(f: any, odds: any) {
   };
 }
 
+const HOUSE_MARGIN = 0.05;
+const LIABILITY_MIN_STAKES = 500; // only rebalance once enough money is on a match
+const POPULAR = /(premier league|la liga|serie a|bundesliga i\b|ligue 1|champions league|europa league|world cup|euro)/i;
+
+// Rebalance odds per match from pending bets so the house keeps its margin whichever outcome wins.
+async function withHouseOdds(db: any, matches: any[]) {
+  const since = new Date(Date.now() - 4 * 86400_000).toISOString();
+  const { data: bets } = await db.from('bets').select('stake, selections').eq('status', 'pending').gte('created_at', since);
+  const book: Record<string, { home: number; draw: number; away: number }> = {};
+  for (const b of bets ?? []) {
+    for (const sel of Array.isArray(b.selections) ? b.selections : []) {
+      if (!sel?.matchId || !['home', 'draw', 'away'].includes(sel.selection)) continue;
+      (book[sel.matchId] ??= { home: 0, draw: 0, away: 0 })[sel.selection as 'home'] += Number(b.stake) || 0;
+    }
+  }
+  return matches.map((m) => {
+    const popular = POPULAR.test(m.league ?? '');
+    const stakes = book[m.id];
+    if (!m.odds || !stakes || stakes.home + stakes.draw + stakes.away < LIABILITY_MIN_STAKES) return { ...m, popular, oddsAdjusted: false };
+    const base = [m.odds.home, m.odds.draw ?? 0, m.odds.away];
+    const adj = adjustOddsForLiability(base, stakes, HOUSE_MARGIN).map((o, i) => (base[i] ? Math.min(Math.max(o, 1.01), base[i] * 2) : 0));
+    return { ...m, popular, oddsAdjusted: true, odds: { home: adj[0], draw: m.odds.draw ? adj[1] : undefined, away: adj[2] } };
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
@@ -49,7 +76,7 @@ Deno.serve(async (req) => {
 
     const { data: cached } = await db.from('sports_cache').select('payload, fetched_at').eq('cache_key', 'fd:matches').maybeSingle();
     const age = cached ? (Date.now() - new Date(cached.fetched_at).getTime()) / 1000 : Infinity;
-    if (cached && age < FIXTURE_TTL) return reply({ ok: true, cached: true, fetched_at: cached.fetched_at, matches: cached.payload });
+    if (cached && age < FIXTURE_TTL) return reply({ ok: true, cached: true, fetched_at: cached.fetched_at, matches: await withHouseOdds(db, cached.payload as any[]) });
 
     let fixtures: any[] = [];
     try {
@@ -69,7 +96,7 @@ Deno.serve(async (req) => {
       }
     } catch (e) {
       console.error('fixtures failed', e);
-      if (cached) return reply({ ok: true, cached: true, stale: true, fetched_at: cached.fetched_at, matches: cached.payload });
+      if (cached) return reply({ ok: true, cached: true, stale: true, fetched_at: cached.fetched_at, matches: await withHouseOdds(db, cached.payload as any[]) });
       return reply({ ok: false, error: 'Could not load matches right now.' });
     }
 
@@ -93,7 +120,7 @@ Deno.serve(async (req) => {
       { cache_key: 'fd:matches', payload: matches, fetched_at },
       { cache_key: 'fd:odds', payload: oddsMap, fetched_at },
     ]);
-    return reply({ ok: true, cached: false, fetched_at, matches });
+    return reply({ ok: true, cached: false, fetched_at, matches: await withHouseOdds(db, matches) });
   } catch (e) {
     console.error('football-proxy error', e);
     return reply({ ok: false, error: 'Something went wrong loading matches.' });

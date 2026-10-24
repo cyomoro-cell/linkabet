@@ -18,6 +18,7 @@ export interface SportsMatch {
   homeScore?: number;
   awayScore?: number;
   odds?: { home: number; draw?: number; away: number };
+  popular?: boolean;
 }
 
 function TeamLogo({ name }: { name: string }) {
@@ -28,7 +29,6 @@ function TeamLogo({ name }: { name: string }) {
   );
 }
 
-const jitter = (v: number) => Math.max(1.01, Math.round((v + (Math.random() - 0.5) * 0.2) * 100) / 100);
 
 export function toBetMatch(m: SportsMatch, odds = m.odds ?? { home: 0, away: 0 }): Match {
   return {
@@ -44,15 +44,6 @@ export function MatchRow({ match, view = 'list' }: { match: SportsMatch; view?: 
   const [odds, setOdds] = useState(match.odds);
   const [fav, setFav] = useState(false);
   const current = selections.find((s) => s.matchId === match.id);
-
-  // Simulated live odds — will be replaced by real data later.
-  useEffect(() => {
-    if (!match.live || !match.odds) return;
-    const t = setInterval(() => {
-      setOdds((o) => o && ({ home: jitter(o.home), draw: o.draw ? jitter(o.draw) : undefined, away: jitter(o.away) }));
-    }, 4000 + Math.random() * 3000);
-    return () => clearInterval(t);
-  }, [match.live]);
 
   useEffect(() => { setOdds(match.odds); }, [match.odds]);
   const opts = odds ? [

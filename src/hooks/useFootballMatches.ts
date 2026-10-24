@@ -6,6 +6,7 @@ interface Raw {
   id: string; league: string; home: string; away: string; startTime: string; live: boolean;
   minute?: number; homeScore?: number; awayScore?: number;
   odds: { home: number; draw?: number; away: number } | null;
+  popular?: boolean;
 }
 
 export function useFootballMatches() {
@@ -18,7 +19,7 @@ export function useFootballMatches() {
         id: m.id, sport: 'football', league: m.league, home: m.home, away: m.away,
         startTime: new Date(m.startTime), live: m.live, minute: m.minute,
         homeScore: m.homeScore, awayScore: m.awayScore,
-        odds: m.odds ?? undefined,
+        odds: m.odds ?? undefined, popular: !!m.popular,
       })) as SportsMatch[];
     },
     refetchInterval: 120_000,
