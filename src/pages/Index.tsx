@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Receipt, Loader2 } from 'lucide-react';
 import { useBetSlip } from '@/hooks/useBetSlip';
 import { Sport } from '@/types';
-import { LiveTicker, BigWinsCarousel, MobileWalletBar, LiveChatButton } from '@/components/sections/HomeLiveExtras';
+import { BigWinsCarousel, MobileWalletBar, LiveChatButton } from '@/components/sections/HomeLiveExtras';
 
 const Index = () => {
   const { selections } = useBetSlip();
@@ -32,7 +32,6 @@ const Index = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <LiveTicker />
 
       <div className="flex-1 flex">
         {/* Desktop Sidebar */}
