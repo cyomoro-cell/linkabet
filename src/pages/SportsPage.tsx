@@ -12,7 +12,7 @@ import { useFootballMatches } from '@/hooks/useFootballMatches';
 
 const at = (h: number, m = 0, dayOffset = 0) => { const d = new Date(); d.setDate(d.getDate() + dayOffset); d.setHours(h, m, 0, 0); return d; };
 
-const MATCHES: SportsMatch[] = [
+const SAMPLE_MATCHES: SportsMatch[] = [
   { id: 's1', sport: 'football', league: 'Rwanda Premier League', home: 'APR', away: 'Rayon Sports', startTime: at(17), live: true, minute: 78, homeScore: 2, awayScore: 1, odds: { home: 1.45, draw: 3.9, away: 6.5 } },
   { id: 's2', sport: 'football', league: 'Rwanda Premier League', home: 'Police FC', away: 'Kiyovu', startTime: at(19), live: false, odds: { home: 2.1, draw: 3.4, away: 2.8 } },
   { id: 's3', sport: 'football', league: 'Rwanda Premier League', home: 'Mukura VS', away: 'AS Kigali', startTime: at(15, 30, 1), live: false, odds: { home: 2.45, draw: 3.1, away: 2.6 } },
@@ -43,7 +43,7 @@ export default function SportsPage() {
   const [view, setView] = useState<'list' | 'grid'>('list');
 
   const { data: realMatches, isLoading, isError } = useFootballMatches();
-  const MATCHES = realMatches ?? [];
+  const MATCHES = realMatches && realMatches.length ? realMatches : SAMPLE_MATCHES;
   const groups = useMemo(() => {
     const today = new Date().toDateString();
     const list = MATCHES.filter((m) => m.sport === sport)
@@ -129,8 +129,10 @@ export default function SportsPage() {
           )}
         </main>
 
-        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-80 shrink-0 border-l border-border bg-card/40 p-4 lg:block">
-          <SportsBetSlip />
+        <aside className="hidden w-[22rem] shrink-0 lg:block">
+          <div className="fixed right-4 top-24 z-40 h-[calc(100vh-7rem)] w-80 rounded-2xl border border-primary/30 bg-card/90 p-4 shadow-[0_20px_60px_-15px_hsl(var(--primary)/0.35)] backdrop-blur-xl animate-in fade-in slide-in-from-right-6 duration-500">
+            <SportsBetSlip />
+          </div>
         </aside>
       </div>
 
@@ -183,7 +185,7 @@ function SportsBetSlip() {
       </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto">
-        {selections.length === 0 && <p className="py-12 text-center text-sm text-muted-foreground">Tap any odds to add a selection.</p>}
+        {selections.length === 0 && <p className="py-12 text-center text-sm text-muted-foreground">Click on odds to add selections</p>}
         {selections.map((s) => (
           <div key={s.matchId} className="rounded-lg border border-border bg-secondary/40 p-3">
             <div className="flex items-start justify-between gap-2">

@@ -20,5 +20,5 @@
 - [x] OddsButton (flash + trend arrow) and MatchRow (pre-match/live, simulated odds, favorite star)
 - [x] Add 5dollarfootballapi as real sports data source
 
-- [ ] Match list with league, teams, time, 1/X/2 odds (sample fallback)
-- [ ] Floating bet slip panel: selections, stake, payout, Place Bet, empty message
+- [x] Match list with league, teams, time, 1/X/2 odds (sample fallback)
+- [x] Floating bet slip panel: selections, stake, payout, Place Bet, empty message
