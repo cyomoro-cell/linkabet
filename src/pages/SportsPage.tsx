@@ -167,10 +167,10 @@ function SportsBetSlip() {
     for (let i = 0; i < selections.length; i++) for (let j = i + 1; j < selections.length; j++) pairs.push(selections[i].odds * selections[j].odds);
     totalStake = stake * pairs.length; payout = pairs.reduce((a, o) => a + o * stake, 0);
   }
-  const disabled = placing || selections.length === 0 || totalStake <= 0 || mode === 'System';
   const { user, wallet, refreshWallet } = useAuth();
   const navigate = useNavigate();
   const [placing, setPlacing] = useState(false);
+  const disabled = placing || selections.length === 0 || totalStake <= 0 || mode === 'System';
   const toSel = (s: typeof selections[number]) => ({ matchId: s.matchId, selection: s.selection, odds: s.odds, homeTeam: s.match.homeTeam.name, awayTeam: s.match.awayTeam.name });
 
   async function placeBet() {
