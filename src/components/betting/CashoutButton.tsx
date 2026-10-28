@@ -37,7 +37,7 @@ function getCashoutValue(bet: Bet): number {
 
 export function CashoutButton({ bet, onCashout }: CashoutButtonProps) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const { user, refreshWallet, wallet } = useAuth();
+  const { user, refreshWallet } = useAuth();
   const { toast } = useToast();
 
   if (bet.status !== 'pending') return null;
@@ -47,54 +47,17 @@ export function CashoutButton({ bet, onCashout }: CashoutButtonProps) {
   const handleCashout = async () => {
     if (!user) return;
     setIsProcessing(true);
-
     try {
-      // 1. Update bet status to cashout
-      const { error: betError } = await db
-        .from('bets')
-        .update({
-          status: 'cashout',
-          settled_at: new Date().toISOString(),
-          result_data: { cashout_value: cashoutValue },
-        })
-        .eq('id', bet.id)
-        .eq('user_id', user.id);
-
-      if (betError) throw betError;
-
-      // 2. Create cashout transaction (refund type)
-      const { error: txError } = await db.from('transactions').insert({
-        user_id: user.id,
-        type: 'refund',
-        amount: cashoutValue,
-        fee: 0,
-        net_amount: cashoutValue,
-        description: `Cashout: ${(bet.match_data as any)?.homeTeam?.name || 'Match'} vs ${(bet.match_data as any)?.awayTeam?.name || 'Match'}`,
+      const { error } = await db.rpc('cashout_bet', {
+        p_bet_id: bet.id,
+        p_idempotency_key: crypto.randomUUID(),
       });
-
-      if (txError) throw txError;
-
-      // 3. Credit wallet
-      const currentBalance = Number(wallet?.balance || 0);
-      const { error: walletError } = await db
-        .from('wallets')
-        .update({ balance: currentBalance + cashoutValue, updated_at: new Date().toISOString() })
-        .eq('user_id', user.id);
-
-      if (walletError) throw walletError;
-
+      if (error) throw error;
       await refreshWallet();
       onCashout();
-      toast({
-        title: 'Cashed out!',
-        description: `$${cashoutValue.toFixed(2)} has been added to your wallet.`,
-      });
+      toast({ title: 'Cashout complete', description: 'Virtual points returned to your balance. They have no cash value.' });
     } catch (error: any) {
-      toast({
-        title: 'Cashout failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Cashout failed', description: error.message, variant: 'destructive' });
     } finally {
       setIsProcessing(false);
     }
