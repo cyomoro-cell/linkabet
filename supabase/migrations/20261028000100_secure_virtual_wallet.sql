@@ -112,6 +112,10 @@ BEGIN
   -- Lock first so simultaneous bets cannot spend the same virtual points.
   SELECT * INTO v_wallet FROM public.wallets WHERE user_id = uid FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Wallet not found'; END IF;
+  -- Recheck after acquiring the lock so concurrent retries with the same key are idempotent.
+  SELECT id INTO v_existing FROM public.bets
+    WHERE user_id = uid AND idempotency_key = p_idempotency_key;
+  IF v_existing IS NOT NULL THEN RETURN v_existing; END IF;
   v_balance := v_wallet.balance;
 
   FOR v_selection IN SELECT value FROM jsonb_array_elements(p_selections)
@@ -292,17 +296,21 @@ RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $
+AS $$
 DECLARE
   uid uuid := auth.uid();
+  v_user_id uuid;
   v_bet public.bets%ROWTYPE;
 BEGIN
   IF uid IS NULL OR NOT public.is_admin_or_master(uid) THEN RAISE EXCEPTION 'Admin access required'; END IF;
-  IF p_result NOT IN ('won','lost') THEN RAISE EXCEPTION 'Invalid settlement result'; END IF;
+  IF p_result IS NULL OR p_result NOT IN ('won','lost') THEN RAISE EXCEPTION 'Invalid settlement result'; END IF;
+  SELECT user_id INTO v_user_id FROM public.bets WHERE id = p_bet_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Bet not found'; END IF;
+  -- Keep the same wallet-then-bet lock order as cashout_bet.
+  PERFORM 1 FROM public.wallets WHERE user_id = v_user_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Wallet not found'; END IF;
   SELECT * INTO v_bet FROM public.bets WHERE id = p_bet_id FOR UPDATE;
   IF NOT FOUND OR v_bet.status <> 'pending' THEN RAISE EXCEPTION 'Bet is not pending'; END IF;
-  PERFORM 1 FROM public.wallets WHERE user_id = v_bet.user_id FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Wallet not found'; END IF;
   UPDATE public.bets SET status = p_result, settled_at = now(),
     result_data = jsonb_build_object('settled_by', uid, 'result', p_result) WHERE id = p_bet_id;
   IF p_result = 'won' THEN
@@ -312,7 +320,7 @@ BEGIN
         'Virtual points won on simulated sports outcome', 'approved', v_bet.id::text, uid, now());
   END IF;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.admin_review_transaction(uuid,boolean) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.admin_settle_bet(uuid,text) FROM PUBLIC, anon;
