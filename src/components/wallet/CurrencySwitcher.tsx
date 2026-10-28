@@ -54,10 +54,7 @@ export function CurrencySwitcher() {
 
     setIsLoading(true);
     try {
-      const { error } = await db
-        .from('wallets')
-        .update({ currency: newCurrency, updated_at: new Date().toISOString() })
-        .eq('user_id', user.id);
+      const { error } = await db.rpc('set_wallet_currency', { p_currency: newCurrency });
 
       if (error) throw error;
 
