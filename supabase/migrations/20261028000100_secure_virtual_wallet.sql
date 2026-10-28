@@ -245,6 +245,80 @@ BEGIN
 END;
 $$;
 
+
+-- Remove every direct UPDATE policy on financial tables; admin mutations also go through
+-- atomic functions so balance, bet status and ledger entries cannot drift apart.
+DO $
+DECLARE p record;
+BEGIN
+  FOR p IN SELECT schemaname, tablename, policyname FROM pg_policies
+    WHERE schemaname = 'public' AND tablename IN ('wallets','transactions','bets') AND cmd = 'UPDATE'
+  LOOP
+    EXECUTE format('DROP POLICY %I ON %I.%I', p.policyname, p.schemaname, p.tablename);
+  END LOOP;
+END $;
+
+CREATE OR REPLACE FUNCTION public.admin_review_transaction(p_tx_id uuid, p_approve boolean)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $
+DECLARE
+  uid uuid := auth.uid();
+  v_tx public.transactions%ROWTYPE;
+BEGIN
+  IF uid IS NULL OR NOT public.is_admin_or_master(uid) THEN RAISE EXCEPTION 'Admin access required'; END IF;
+  SELECT * INTO v_tx FROM public.transactions WHERE id = p_tx_id FOR UPDATE;
+  IF NOT FOUND OR v_tx.type <> 'withdrawal' OR v_tx.status <> 'pending' THEN
+    RAISE EXCEPTION 'Transaction is not a pending withdrawal';
+  END IF;
+  IF p_approve THEN
+    UPDATE public.transactions SET status = 'approved', approved_by = uid, approved_at = now() WHERE id = p_tx_id;
+  ELSE
+    PERFORM 1 FROM public.wallets WHERE user_id = v_tx.user_id FOR UPDATE;
+    UPDATE public.wallets SET balance = balance + v_tx.amount, updated_at = now() WHERE user_id = v_tx.user_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Wallet not found'; END IF;
+    UPDATE public.transactions SET status = 'rejected', approved_by = uid, approved_at = now() WHERE id = p_tx_id;
+    INSERT INTO public.transactions (user_id, type, amount, fee, net_amount, description, status, reference_id, approved_by, approved_at)
+      VALUES (v_tx.user_id, 'refund', v_tx.amount, 0, v_tx.amount, 'Virtual-point refund: withdrawal rejected',
+        'approved', v_tx.id::text, uid, now());
+  END IF;
+END;
+$;
+
+CREATE OR REPLACE FUNCTION public.admin_settle_bet(p_bet_id uuid, p_result text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $
+DECLARE
+  uid uuid := auth.uid();
+  v_bet public.bets%ROWTYPE;
+BEGIN
+  IF uid IS NULL OR NOT public.is_admin_or_master(uid) THEN RAISE EXCEPTION 'Admin access required'; END IF;
+  IF p_result NOT IN ('won','lost') THEN RAISE EXCEPTION 'Invalid settlement result'; END IF;
+  SELECT * INTO v_bet FROM public.bets WHERE id = p_bet_id FOR UPDATE;
+  IF NOT FOUND OR v_bet.status <> 'pending' THEN RAISE EXCEPTION 'Bet is not pending'; END IF;
+  PERFORM 1 FROM public.wallets WHERE user_id = v_bet.user_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Wallet not found'; END IF;
+  UPDATE public.bets SET status = p_result, settled_at = now(),
+    result_data = jsonb_build_object('settled_by', uid, 'result', p_result) WHERE id = p_bet_id;
+  IF p_result = 'won' THEN
+    UPDATE public.wallets SET balance = balance + v_bet.potential_win, updated_at = now() WHERE user_id = v_bet.user_id;
+    INSERT INTO public.transactions (user_id, type, amount, fee, net_amount, description, status, reference_id, approved_by, approved_at)
+      VALUES (v_bet.user_id, 'win', v_bet.potential_win, 0, v_bet.potential_win,
+        'Virtual points won on simulated sports outcome', 'approved', v_bet.id::text, uid, now());
+  END IF;
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.admin_review_transaction(uuid,boolean) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.admin_settle_bet(uuid,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_review_transaction(uuid,boolean) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_settle_bet(uuid,text) TO authenticated;
+
 REVOKE ALL ON FUNCTION public.set_wallet_currency(text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.place_bet(jsonb,numeric,text,text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.cashout_bet(uuid,text) FROM PUBLIC, anon;
