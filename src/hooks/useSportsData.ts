@@ -29,11 +29,12 @@ export function useSportsData(sport: string, type: SportsDataType) {
   const [refreshing, setRefreshing] = useState(false);
   const requestId = useRef(0);
   const mounted = useRef(false);
+  const hasData = useRef(false);
 
   const load = useCallback(async (refresh = false) => {
     const id = ++requestId.current;
     if (refresh) setRefreshing(true);
-    else if (!data?.items?.length) setLoading(true);
+    else if (!hasData.current) setLoading(true);
 
     try {
       const { data: response, error } = await supabase.functions.invoke('sports-data', {
@@ -51,6 +52,7 @@ export function useSportsData(sport: string, type: SportsDataType) {
         return;
       }
 
+      hasData.current = Array.isArray(response.items) && response.items.length > 0;
       setData(response as Result);
     } catch {
       if (!mounted.current || id !== requestId.current) return;
@@ -63,11 +65,12 @@ export function useSportsData(sport: string, type: SportsDataType) {
         setRefreshing(false);
       }
     }
-  }, [sport, type, data?.items?.length]);
+  }, [sport, type]);
 
   useEffect(() => {
     mounted.current = true;
     setData(null);
+    hasData.current = false;
     setLoading(true);
     setRefreshing(false);
     void load();
