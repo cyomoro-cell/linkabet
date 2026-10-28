@@ -176,30 +176,35 @@ function SportsBetSlip() {
   async function placeBet() {
     if (!user) return navigate('/auth');
     const balance = Number(wallet?.balance ?? 0);
-    if (totalStake > balance) return toast.error('Not enough balance');
+    if (totalStake > balance) return toast.error('Not enough virtual points');
+    if (mode === 'System') return toast.error('System bets are not available yet');
     const rows = mode === 'Singles'
-      ? selections.filter((s) => (stakes[s.matchId] ?? 0) > 0).map((s) => ({ s: [s], stake: stakes[s.matchId], odds: s.odds }))
-      : [{ s: selections, stake, odds: totalOdds }];
+      ? selections.filter((s) => (stakes[s.matchId] ?? 0) > 0).map((s) => ({ s: [s], stake: stakes[s.matchId] }))
+      : [{ s: selections, stake }];
+    if (!rows.length || rows.some((r) => !Number.isFinite(r.stake) || r.stake <= 0)) {
+      return toast.error('Enter a valid stake for each selection');
+    }
     setPlacing(true);
     try {
+      // Each request is atomic and the server recomputes odds and payout.
       for (const r of rows) {
-        const first = r.s[0].match;
-        const { error } = await db.from('bets').insert({
-          user_id: user.id, match_id: r.s[0].matchId,
-          match_data: { homeTeam: first.homeTeam, awayTeam: first.awayTeam, league: first.league, sport: first.sport },
-          selections: r.s.map(toSel), stake: r.stake, total_odds: r.odds, potential_win: r.stake * r.odds,
-        } as any);
+        const { error } = await db.rpc('place_bet', {
+          p_selections: r.s.map((s) => ({ matchId: s.matchId, selection: s.selection })),
+          p_stake: r.stake,
+          p_mode: r.s.length > 1 ? 'Accumulator' : 'Singles',
+          p_idempotency_key: crypto.randomUUID(),
+        });
         if (error) throw error;
-        await db.from('transactions').insert({ user_id: user.id, type: 'bet', amount: r.stake, fee: 0, net_amount: r.stake, status: 'approved', description: `Bet on ${first.homeTeam.name} vs ${first.awayTeam.name}` } as any);
       }
-      const { error: we } = await db.from('wallets').update({ balance: balance - totalStake, updated_at: new Date().toISOString() }).eq('user_id', user.id);
-      if (we) throw we;
       await refreshWallet();
-      toast.success(`Bet placed! Potential payout ${payout.toFixed(2)}`);
-      clearAll(); setStakes({});
+      toast.success('Bet placed using virtual points. Virtual points have no cash value.');
+      clearAll();
+      setStakes({});
     } catch (e: any) {
-      toast.error(e.message ?? 'Could not place bet');
-    } finally { setPlacing(false); }
+      toast.error(e.message ?? 'Could not place bet. Check your virtual-point balance and try again.');
+    } finally {
+      setPlacing(false);
+    }
   }
 
   return (
