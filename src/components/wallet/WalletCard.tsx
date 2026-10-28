@@ -153,12 +153,14 @@ export function WalletCard() {
         </div>
       </div>
 
+      <p className="mb-4 text-xs text-muted-foreground">Linkabet uses simulated virtual points only. Points have no cash value; deposits and withdrawals are disabled.</p>
+
       <div className="grid grid-cols-2 gap-3">
         <Dialog open={depositOpen} onOpenChange={setDepositOpen}>
           <DialogTrigger asChild>
-            <Button variant="hero" className="w-full" disabled={!settings.deposits_enabled}>
+            <Button variant="hero" className="w-full" disabled>
               <ArrowDownLeft className="h-4 w-4" />
-              Deposit
+              Virtual points only
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -201,9 +203,9 @@ export function WalletCard() {
 
         <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full" disabled={!settings.withdrawals_enabled}>
+            <Button variant="outline" className="w-full" disabled>
               <ArrowUpRight className="h-4 w-4" />
-              Withdraw
+              Unavailable
             </Button>
           </DialogTrigger>
           <DialogContent>
