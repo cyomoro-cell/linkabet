@@ -282,7 +282,6 @@ function WithdrawalsTab() {
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-  const { user } = useAuth();
 
   const fetchWithdrawals = async () => {
     const { data } = await db
@@ -298,9 +297,10 @@ function WithdrawalsTab() {
   useEffect(() => { fetchWithdrawals(); }, []);
 
   const handleApprove = async (tx: any) => {
-    const { error } = await db.from('transactions')
-      .update({ status: 'approved', approved_by: user?.id, approved_at: new Date().toISOString() })
-      .eq('id', tx.id);
+    const { error } = await db.rpc('admin_review_transaction', {
+      p_tx_id: tx.id,
+      p_approve: true,
+    });
     if (error) {
       toast({ title: 'Failed', description: error.message, variant: 'destructive' });
     } else {
@@ -310,35 +310,15 @@ function WithdrawalsTab() {
   };
 
   const handleReject = async (tx: any) => {
-    const { error: txError } = await db.from('transactions')
-      .update({ status: 'rejected' })
-      .eq('id', tx.id);
-
-    if (txError) {
-      toast({ title: 'Failed', description: txError.message, variant: 'destructive' });
+    const { error } = await db.rpc('admin_review_transaction', {
+      p_tx_id: tx.id,
+      p_approve: false,
+    });
+    if (error) {
+      toast({ title: 'Failed', description: error.message, variant: 'destructive' });
       return;
     }
-
-    // Refund to wallet
-    const { data: walletData } = await db.from('wallets').select('balance').eq('user_id', tx.user_id).single();
-    if (walletData) {
-      await db.from('wallets')
-        .update({ balance: Number(walletData.balance) + Number(tx.amount) })
-        .eq('user_id', tx.user_id);
-    }
-
-    // Create refund transaction
-    await db.from('transactions').insert({
-      user_id: tx.user_id,
-      type: 'refund',
-      amount: Number(tx.amount),
-      fee: 0,
-      net_amount: Number(tx.amount),
-      description: `Refund: Withdrawal rejected`,
-      status: 'approved',
-    });
-
-    toast({ title: 'Withdrawal rejected & refunded' });
+    toast({ title: 'Withdrawal rejected and virtual points refunded' });
     fetchWithdrawals();
   };
 
@@ -420,48 +400,16 @@ function BetsTab() {
   useEffect(() => { fetchBets(); }, []);
 
   const handleSettle = async (bet: any, result: 'won' | 'lost') => {
-    try {
-      // Update bet status
-      const { error: betError } = await db.from('bets')
-        .update({
-          status: result,
-          settled_at: new Date().toISOString(),
-          result_data: { settled_by: 'admin', result },
-        })
-        .eq('id', bet.id);
-
-      if (betError) throw betError;
-
-      // If won, credit the user's wallet with winnings and create a win transaction
-      if (result === 'won') {
-        const { data: walletData } = await db.from('wallets')
-          .select('balance')
-          .eq('user_id', bet.user_id)
-          .single();
-
-        if (walletData) {
-          const newBalance = Number(walletData.balance) + Number(bet.potential_win);
-          await db.from('wallets')
-            .update({ balance: newBalance, updated_at: new Date().toISOString() })
-            .eq('user_id', bet.user_id);
-        }
-
-        await db.from('transactions').insert({
-          user_id: bet.user_id,
-          type: 'win',
-          amount: Number(bet.potential_win),
-          fee: 0,
-          net_amount: Number(bet.potential_win),
-          description: `Won bet: ${bet.match_data?.homeTeam?.name || 'Team A'} vs ${bet.match_data?.awayTeam?.name || 'Team B'}`,
-          status: 'approved',
-        });
-      }
-
-      toast({ title: result === 'won' ? 'Bet settled as WON — user credited' : 'Bet settled as LOST' });
-      fetchBets();
-    } catch (error: any) {
+    const { error } = await db.rpc('admin_settle_bet', {
+      p_bet_id: bet.id,
+      p_result: result,
+    });
+    if (error) {
       toast({ title: 'Settlement failed', description: error.message, variant: 'destructive' });
+      return;
     }
+    toast({ title: result === 'won' ? 'Bet settled as WON — virtual points credited' : 'Bet settled as LOST' });
+    fetchBets();
   };
 
   if (isLoading) return <div className="animate-pulse h-32 bg-secondary rounded-lg" />;

@@ -345,6 +345,15 @@ export type Database = {
         Returns: boolean
       }
       is_admin_or_master: { Args: { _user_id: string }; Returns: boolean }
+      set_wallet_currency: { Args: { p_currency: string }; Returns: undefined }
+      place_bet: {
+        Args: { p_selections: Json; p_stake: number; p_mode: string; p_idempotency_key: string }
+        Returns: string
+      }
+      cashout_bet: { Args: { p_bet_id: string; p_idempotency_key: string }; Returns: number }
+      charge_ai_fee: { Args: { p_description?: string }; Returns: number }
+      admin_review_transaction: { Args: { p_tx_id: string; p_approve: boolean }; Returns: undefined }
+      admin_settle_bet: { Args: { p_bet_id: string; p_result: string }; Returns: undefined }
     }
     Enums: {
       app_role: "user" | "admin" | "master"

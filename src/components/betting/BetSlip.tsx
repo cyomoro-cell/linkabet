@@ -28,87 +28,40 @@ export function BetSlip() {
   const balance = wallet?.balance ? Number(wallet.balance) : 0;
 
   const handlePlaceBet = async () => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !user) {
       navigate('/auth');
       return;
     }
-
     if (!settings.betting_enabled) {
       toast({ title: 'Betting is currently disabled', variant: 'destructive' });
       return;
     }
-
-    if (stake <= 0 || selections.length === 0) {
-      toast({ title: 'Invalid bet', description: 'Add selections and enter a stake.', variant: 'destructive' });
+    if (!Number.isFinite(stake) || stake <= 0 || selections.length === 0) {
+      toast({ title: 'Invalid bet', description: 'Add selections and enter a valid stake.', variant: 'destructive' });
       return;
     }
-
-    if (stake < settings.min_bet_amount) {
-      toast({ title: 'Stake too low', description: `Minimum bet is ${formatCurrency(settings.min_bet_amount, currency)}`, variant: 'destructive' });
-      return;
-    }
-
-    if (stake > settings.max_bet_amount) {
-      toast({ title: 'Stake too high', description: `Maximum bet is ${formatCurrency(settings.max_bet_amount, currency)}`, variant: 'destructive' });
-      return;
-    }
-
     if (stake > balance) {
-      toast({ title: 'Insufficient balance', description: `Your balance is ${formatCurrency(balance, currency)}`, variant: 'destructive' });
+      toast({ title: 'Insufficient virtual points', description: 'Your virtual-point balance is too low.', variant: 'destructive' });
       return;
     }
 
     setIsPlacing(true);
     try {
-      const firstSelection = selections[0];
-      const { error: betError } = await db.from('bets').insert({
-        user_id: user!.id,
-        match_id: firstSelection.matchId,
-        match_data: {
-          homeTeam: firstSelection.match.homeTeam,
-          awayTeam: firstSelection.match.awayTeam,
-          league: firstSelection.match.league,
-          sport: firstSelection.match.sport,
-        },
-        selections: selections.map(s => ({
+      const { error } = await db.rpc('place_bet', {
+        p_selections: selections.map((s) => ({
           matchId: s.matchId,
           selection: s.selection,
-          odds: s.odds,
-          homeTeam: s.match.homeTeam.name,
-          awayTeam: s.match.awayTeam.name,
         })),
-        stake,
-        total_odds: totalOdds,
-        potential_win: potentialWin,
-      } as any);
-
-      if (betError) throw betError;
-
-      const { error: txError } = await db.from('transactions').insert({
-        user_id: user!.id,
-        type: 'bet',
-        amount: stake,
-        fee: 0,
-        net_amount: stake,
-        status: 'approved',
-        description: `Bet on ${firstSelection.match.homeTeam.name} vs ${firstSelection.match.awayTeam.name}`,
+        p_stake: stake,
+        p_mode: selections.length > 1 ? 'Accumulator' : 'Singles',
+        p_idempotency_key: crypto.randomUUID(),
       });
-
-      if (txError) throw txError;
-
-      const newBalance = balance - stake;
-      const { error: walletError } = await db
-        .from('wallets')
-        .update({ balance: newBalance, updated_at: new Date().toISOString() })
-        .eq('user_id', user!.id);
-
-      if (walletError) throw walletError;
-
+      if (error) throw error;
       await refreshWallet();
       clearAll();
-      toast({ title: 'Bet placed!', description: `${formatCurrency(stake, currency)} staked at ${totalOdds.toFixed(2)} odds` });
+      toast({ title: 'Bet placed!', description: `${formatCurrency(stake, currency)} virtual points staked. Virtual points have no cash value.` });
     } catch (error: any) {
-      toast({ title: 'Failed to place bet', description: error.message, variant: 'destructive' });
+      toast({ title: 'Could not place bet', description: error.message ?? 'Please try again.', variant: 'destructive' });
     } finally {
       setIsPlacing(false);
     }
