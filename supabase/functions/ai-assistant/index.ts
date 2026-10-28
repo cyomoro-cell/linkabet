@@ -15,7 +15,8 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, userId } = await req.json();
+    const { messages } = await req.json();
+    const authorization = req.headers.get("Authorization") || "";
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -25,8 +26,31 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Create Supabase client with service role
-    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error("Backend is not configured");
+    }
+    if (!authorization.toLowerCase().startsWith("bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Validate the bearer token and derive identity from Supabase Auth, never from request JSON.
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authorization } },
+    });
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userId = user.id;
+
+    // Service-role client is used only after the caller has been authenticated.
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Check if user is admin or master (free AI access)
     const { data: isAdminOrMaster } = await supabase.rpc("is_admin_or_master", { _user_id: userId });
@@ -118,24 +142,19 @@ Be concise, helpful, and always encourage responsible betting. Never guarantee w
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
-    // Deduct fee from wallet (skip if free access)
-    const fee = isFreeAccess ? 0 : BASE_FEE;
-    
+    // Atomic charge uses the caller's verified JWT, so auth.uid() is authoritative.
+    let fee = 0;
     if (!isFreeAccess) {
-      const newBalance = currentBalance - fee;
-      await supabase
-        .from("wallets")
-        .update({ balance: newBalance, updated_at: new Date().toISOString() })
-        .eq("user_id", userId);
-
-      await supabase.from("transactions").insert({
-        user_id: userId,
-        type: "ai_fee",
-        amount: fee,
-        fee: 0,
-        net_amount: fee,
-        description: "AI Assistant usage fee",
+      const { data: chargedFee, error: chargeError } = await userClient.rpc("charge_ai_fee", {
+        p_description: "AI assistant virtual-points usage",
       });
+      if (chargeError) {
+        return new Response(JSON.stringify({ error: chargeError.message || "Insufficient virtual points" }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      fee = Number(chargedFee ?? BASE_FEE);
     }
 
     // Log AI usage
