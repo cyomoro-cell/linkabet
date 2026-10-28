@@ -46,17 +46,17 @@ export function useSportsData(sport: string, type: SportsDataType) {
       if (error || !response?.ok) {
         const message = response?.error ?? error?.message ?? 'Could not load sports data.';
         // Keep the last successful response visible if a refresh fails.
-        setData((previous) => previous?.items?.length
+        setData((previous) => previous?.ok
           ? { ...previous, stale: true, error: message }
           : { ok: false, error: message });
         return;
       }
 
-      hasData.current = Array.isArray(response.items) && response.items.length > 0;
+      hasData.current = response.ok === true && Array.isArray(response.items);
       setData(response as Result);
     } catch {
       if (!mounted.current || id !== requestId.current) return;
-      setData((previous) => previous?.items?.length
+      setData((previous) => previous?.ok
         ? { ...previous, stale: true, error: 'Refresh failed. Showing the last available data.' }
         : { ok: false, error: 'Could not reach the sports data server.' });
     } finally {
