@@ -118,7 +118,7 @@ BEGIN
   LOOP
     v_match_id := v_selection->>'matchId';
     v_pick := v_selection->>'selection';
-    IF v_match_id IS NULL OR v_pick NOT IN ('home','draw','away') THEN RAISE EXCEPTION 'Invalid selection'; END IF;
+    IF v_match_id IS NULL OR v_pick IS NULL OR v_pick NOT IN ('home','draw','away') THEN RAISE EXCEPTION 'Invalid selection'; END IF;
 
     v_cache_match := NULL;
     SELECT item INTO v_cache_match
