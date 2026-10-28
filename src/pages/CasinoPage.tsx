@@ -16,9 +16,6 @@ const games: { id: GameId; name: string; tagline: string; icon: typeof Dices; ac
   { id: 'crash', name: 'Crash Run', tagline: 'How long can your rocket stay airborne?', icon: Zap, accent: 'from-sky-500/20 to-blue-950/40' },
 ];
 
-const cardLabel = (card: PlayingCard) => `${card.rank}${card.suit}`;
-const cardValue = (card: PlayingCard) => card.rank === 'A' ? 11 : ['K', 'Q', 'J'].includes(card.rank) ? 10 : Number(card.rank);
-
 export default function CasinoPage() {
   const [activeGame, setActiveGame] = useState<GameId>('roulette');
   const [scores, setScores] = useState<Record<GameId, number>>({ roulette: 0, blackjack: 0, slots: 0, crash: 0 });
