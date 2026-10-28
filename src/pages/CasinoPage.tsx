@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-type Category = 'All games' | 'Arcade' | 'Puzzle' | 'Strategy';
+type Category = 'All games' | 'Arcade' | 'Puzzle' | 'Strategy' | 'Memory' | 'Reflex';
 
 type ArcadeGame = {
   id: string;
@@ -90,9 +90,30 @@ const games: ArcadeGame[] = [
     palette: 'from-sky-400/30 via-indigo-500/20 to-purple-500/30',
     description: 'Solve compact logic challenges and collect achievement badges.',
   },
+  { id: 'color-cascade', title: 'Color Cascade', subtitle: 'Puzzle • Color match', category: 'Puzzle', icon: Layers3, palette: 'from-rose-400/30 via-violet-500/20 to-sky-500/30', tag: 'Popular', description: 'Sort a bright cascade of colors into matching groups.' },
+  { id: 'memory-matrix', title: 'Memory Matrix', subtitle: 'Memory • Pattern recall', category: 'Memory', icon: Grid2X2, palette: 'from-blue-400/30 via-cyan-500/20 to-emerald-500/30', description: 'Repeat a growing pattern and train your recall.' },
+  { id: 'quick-switch', title: 'Quick Switch', subtitle: 'Reflex • Reaction', category: 'Reflex', icon: Zap, palette: 'from-yellow-400/30 via-orange-500/20 to-pink-500/30', tag: 'New', description: 'React to changing signals in a quick-fire challenge.' },
+  { id: 'shape-shifter', title: 'Shape Shifter', subtitle: 'Puzzle • Shapes', category: 'Puzzle', icon: Puzzle, palette: 'from-fuchsia-400/30 via-purple-500/20 to-indigo-500/30', description: 'Fit shifting shapes into a compact board.' },
+  { id: 'star-hop', title: 'Star Hop', subtitle: 'Arcade • Precision', category: 'Arcade', icon: Star, palette: 'from-amber-300/30 via-pink-500/20 to-violet-600/30', tag: 'Popular', description: 'Navigate a field of stars with careful timing.' },
+  { id: 'pattern-pop', title: 'Pattern Pop', subtitle: 'Memory • Sequences', category: 'Memory', icon: CircleDot, palette: 'from-cyan-300/30 via-blue-500/20 to-violet-500/30', description: 'Watch a sequence, then repeat it from memory.' },
+  { id: 'flux-flow', title: 'Flux Flow', subtitle: 'Strategy • Routing', category: 'Strategy', icon: Orbit, palette: 'from-teal-300/30 via-emerald-500/20 to-blue-500/30', description: 'Connect the path while keeping your moves organized.' },
+  { id: 'pixel-pilot', title: 'Pixel Pilot', subtitle: 'Arcade • Navigation', category: 'Arcade', icon: Gamepad2, palette: 'from-indigo-400/30 via-sky-500/20 to-fuchsia-500/30', tag: 'New', description: 'Guide a pixel craft through a friendly obstacle course.' },
+  { id: 'tempo-tap', title: 'Tempo Tap', subtitle: 'Reflex • Rhythm', category: 'Reflex', icon: AudioLines, palette: 'from-orange-300/30 via-red-500/20 to-violet-500/30', description: 'Tap along with a changing rhythm and find your tempo.' },
+  { id: 'gem-garden', title: 'Gem Garden', subtitle: 'Puzzle • Matching', category: 'Puzzle', icon: Sparkles, palette: 'from-emerald-300/30 via-cyan-500/20 to-blue-500/30', description: 'Arrange colorful gems into tidy matching patterns.' },
+  { id: 'zen-tiles', title: 'Zen Tiles', subtitle: 'Memory • Focus', category: 'Memory', icon: Grid2X2, palette: 'from-lime-300/30 via-teal-500/20 to-cyan-500/30', description: 'A calm tile challenge built around focus and recall.' },
+  { id: 'comet-course', title: 'Comet Course', subtitle: 'Arcade • Timing', category: 'Arcade', icon: Zap, palette: 'from-sky-300/30 via-indigo-500/20 to-purple-600/30', description: 'Find a smooth route through a field of drifting comets.' },
+  { id: 'logic-lab', title: 'Logic Lab', subtitle: 'Strategy • Deduction', category: 'Strategy', icon: CircleDot, palette: 'from-violet-300/30 via-blue-500/20 to-teal-500/30', description: 'Solve small deduction puzzles one clue at a time.' },
+  { id: 'blink-bounce', title: 'Blink Bounce', subtitle: 'Reflex • Timing', category: 'Reflex', icon: Zap, palette: 'from-pink-300/30 via-amber-500/20 to-orange-500/30', tag: 'New', description: 'Keep up with a bouncing marker in this reaction demo.' },
+  { id: 'prism-path', title: 'Prism Path', subtitle: 'Puzzle • Routing', category: 'Puzzle', icon: Orbit, palette: 'from-pink-300/30 via-indigo-500/20 to-cyan-500/30', description: 'Rotate colorful pieces to create a continuous path.' },
+  { id: 'memory-lane', title: 'Memory Lane', subtitle: 'Memory • Recall', category: 'Memory', icon: Layers3, palette: 'from-amber-300/30 via-rose-500/20 to-fuchsia-500/30', description: 'Recall the order of symbols as the challenge grows.' },
+  { id: 'vector-vault', title: 'Vector Vault', subtitle: 'Strategy • Planning', category: 'Strategy', icon: Layers3, palette: 'from-slate-300/30 via-cyan-500/20 to-blue-500/30', description: 'Plan routes and solve spatial mini-puzzles.' },
+  { id: 'lightning-lane', title: 'Lightning Lane', subtitle: 'Reflex • Reaction', category: 'Reflex', icon: Zap, palette: 'from-yellow-300/30 via-red-500/20 to-fuchsia-500/30', description: 'Choose the right response as signals flash across the screen.' },
+  { id: 'moon-maze', title: 'Moon Maze', subtitle: 'Arcade • Exploration', category: 'Arcade', icon: Orbit, palette: 'from-indigo-300/30 via-purple-500/20 to-slate-600/30', description: 'Explore a compact moonlit maze in a casual navigation demo.' },
+  { id: 'symbol-sprint', title: 'Symbol Sprint', subtitle: 'Memory • Recognition', category: 'Memory', icon: Star, palette: 'from-cyan-300/30 via-violet-500/20 to-pink-500/30', description: 'Spot familiar symbols in a quick visual memory round.' },
+  { id: 'circuit-crafter', title: 'Circuit Crafter', subtitle: 'Strategy • Connections', category: 'Strategy', icon: Layers3, palette: 'from-emerald-300/30 via-blue-500/20 to-indigo-500/30', description: 'Connect circuit pieces to complete a simple logic board.' },
 ];
 
-const categories: Category[] = ['All games', 'Arcade', 'Puzzle', 'Strategy'];
+const categories: Category[] = ['All games', 'Arcade', 'Puzzle', 'Strategy', 'Memory', 'Reflex'];
 
 const CasinoPage = () => {
   const [category, setCategory] = useState<Category>('All games');
@@ -165,7 +186,7 @@ const CasinoPage = () => {
                 Find your next <span className="text-cyan-300">favorite game.</span>
               </h2>
               <p className="mt-4 max-w-xl text-sm leading-6 text-slate-300 md:text-base">
-                Explore original arcade, puzzle, and strategy challenges. Play demos, build streaks, and earn score-only achievements.
+                Browse a growing library of original arcade, puzzle, memory, reflex, and strategy experiences. Discover featured picks and try self-contained demos.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Button onClick={() => openGame(games[0])} className="rounded-xl bg-cyan-300 font-bold text-slate-950 hover:bg-cyan-200">
@@ -192,8 +213,8 @@ const CasinoPage = () => {
 
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-xl font-bold">Explore games</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{visibleGames.length} games to discover</p>
+            <h2 className="text-xl font-bold">Explore the catalogue</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{visibleGames.length} games to discover · Original Linkabet demo catalogue</p>
           </div>
           <label className="flex h-11 w-full items-center gap-2 rounded-xl border bg-card px-3 lg:max-w-xs">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -223,7 +244,7 @@ const CasinoPage = () => {
         </div>
 
         {visibleGames.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visibleGames.map((game) => {
               const Icon = game.icon;
               return (
