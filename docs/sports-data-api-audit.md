@@ -24,8 +24,11 @@
 6. **Use one typed service boundary.** Route match lists, live lists, match details, and score displays through a shared server-backed sports-data contract; keep provider adapters and secrets server-side.
 7. **Secrets hygiene.** Never commit a private provider key, Lovable key, or Supabase service-role key. Keep local `.env` files ignored and configure secrets in the hosting environment. The Supabase publishable/anon key is intended for browser use, but database access must still be protected by correct RLS policies.
 
-## Safe next implementation sequence
+## Implementation progress on this branch
 
+- [x] Harden `src/hooks/useSportsData.ts` so refresh failures retain the last successful items and mark the response stale instead of blanking the view.
+- [x] Prevent overlapping requests and ignore late responses after a newer request or unmount.
+- [x] Keep background polling from re-triggering the full loading state when previously fetched data exists.
 - [ ] Confirm which licensed provider should be authoritative for football fixtures, scores, and standings.
 - [ ] Verify the existing `football-proxy` function is deployed and `FIVE_DOLLAR_FOOTBALL_API_KEY` is configured in Supabase secrets (do not paste the key into chat or commit it).
 - [ ] Run a backend smoke test against the Edge Function and record status, provider, fetched timestamp, cache age, and item count without logging credentials.
