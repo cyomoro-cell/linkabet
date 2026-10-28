@@ -21,6 +21,7 @@ interface Result {
   items?: unknown[];
   cached?: boolean;
   stale?: boolean;
+  warning?: string;
 }
 
 export function useSportsData(sport: string, type: SportsDataType) {
