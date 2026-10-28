@@ -282,7 +282,6 @@ function WithdrawalsTab() {
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-  const { user } = useAuth();
 
   const fetchWithdrawals = async () => {
     const { data } = await db
