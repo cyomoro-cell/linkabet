@@ -58,17 +58,20 @@ export function AIAssistant() {
 
     try {
       // Call AI edge function
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session?.access_token) {
+        throw new Error('Please sign in again to use the assistant.');
+      }
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${sessionData.session.access_token}`,
           },
           body: JSON.stringify({
             messages: [...messages, { role: 'user', content: userMessage }],
-            userId: user.id,
           }),
         }
       );
@@ -76,7 +79,7 @@ export function AIAssistant() {
       if (response.status === 402) {
         toast({
           title: 'Insufficient balance',
-          description: 'Please deposit funds to use the AI assistant',
+          description: 'Your virtual-point balance is too low to use the assistant',
           variant: 'destructive',
         });
         setIsLoading(false);
