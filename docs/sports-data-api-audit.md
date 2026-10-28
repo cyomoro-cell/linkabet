@@ -27,6 +27,8 @@
 ## Implementation progress on this branch
 
 - [x] Harden `src/hooks/useSportsData.ts` so refresh failures retain the last successful items and mark the response stale instead of blanking the view.
+- [x] Prevent empty AI extractions from overwriting a previously useful sports-data cache; return the last successful snapshot with a warning instead.
+- [x] Surface stale/extraction warnings on the Sports Center page.
 - [x] Prevent overlapping requests and ignore late responses after a newer request or unmount.
 - [x] Keep background polling from re-triggering the full loading state when previously fetched data exists.
 - [ ] Confirm which licensed provider should be authoritative for football fixtures, scores, and standings.
