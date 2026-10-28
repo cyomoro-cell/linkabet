@@ -41,6 +41,12 @@ export default function SportsDashboardPage() {
           </Button>
         </div>
 
+        {(data?.warning || data?.error) && (
+          <div role="status" className="mb-5 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+            {data.warning ?? data.error}
+          </div>
+        )}
+
         <div className="mb-8 flex flex-wrap items-center gap-3">
           <div className="inline-flex rounded-full border border-border bg-card p-1">
             {TYPES.map(({ id, label, icon: Icon }) => (

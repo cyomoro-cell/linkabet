@@ -163,8 +163,38 @@ Deno.serve(async (req) => {
     let json: any = {};
     try { json = JSON.parse(text || '{}'); } catch { json = {}; }
     const items = normalize(type, json, source.name);
+
+    // Do not replace a previously useful cache with an empty extraction when a source
+    // page changes layout or the extractor fails silently.
+    if (items.length === 0) {
+      if (cached && Array.isArray(cached.payload) && cached.payload.length > 0) {
+        return reply({
+          ok: true,
+          cached: true,
+          stale: true,
+          source: source.name,
+          fetched_at: cached.fetched_at,
+          items: cached.payload,
+          warning: 'The source returned no usable items; showing the last successful snapshot.',
+        });
+      }
+      return reply({
+        ok: true,
+        cached: false,
+        stale: true,
+        source: source.name,
+        fetched_at: null,
+        items: [],
+        warning: 'The source returned no usable items. Try refreshing later.',
+      });
+    }
+
     const fetched_at = new Date().toISOString();
-    await db.from('sports_cache').upsert({ cache_key: key, payload: items, fetched_at });
+    const { error: cacheError } = await db.from('sports_cache').upsert({ cache_key: key, payload: items, fetched_at });
+    if (cacheError) {
+      // Keep the current response useful even if caching fails; log only operational metadata.
+      console.error('sports cache write failed', { key, message: cacheError.message });
+    }
 
     return reply({ ok: true, cached: false, source: source.name, fetched_at, items });
   } catch (e) {
